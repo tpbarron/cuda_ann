@@ -1,0 +1,16 @@
+num_epochs=#
+max_epochs=#
+num_layers=#
+n_layer_0=#
+n_layer_1=#
+....
+n_layer_n=#
+l_rate=#.#
+momentum=#.#
+desired_acc=#
+current_acc=#
+current_mse=#
+weights01=(w1, ... , wn)
+weights12=(w1, ... , wn)
+...
+weights2n=(w1, ... , wn)
