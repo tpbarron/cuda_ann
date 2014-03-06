@@ -1325,8 +1325,6 @@ bool GPUNet::validate_weights(float *desired_ih_weights, float *desired_ho_weigh
 	CUDA_CHECK_RETURN(cudaMemcpy(h_ih_weights, d_ih_weights, (n_input+1)*n_hidden*sizeof(float), cudaMemcpyDeviceToHost));
 	CUDA_CHECK_RETURN(cudaMemcpy(h_ho_weights, d_ho_weights, (n_hidden+1)*n_output*sizeof(float), cudaMemcpyDeviceToHost));
 
-	std::cout << "weights copied" << std::endl;
-
 	for (int i = 0; i < (n_input+1)*n_hidden; ++i) {
 		if (abs(desired_ih_weights[i] - h_ih_weights[i]) > .005)
 			return false;
@@ -1405,20 +1403,29 @@ void GPUNet::test_backprop(Net &net, NetData &d) {
 
 	std::cout << "Testing backprop_v2" << std::endl;
 	//std::cout << std::endl << "GPU net 0" << std::endl;
-	//print_net();
-	//std::cout << std::endl;
 
-	feed_forward_v1();
+	FeatureVector **dv;
+	GPUNet::copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
+
+	feed_forward_v1_2(dv[0]->input);
 	//std::cout << "GPU net 1" << std::endl;
 	//print_net();
 	//std::cout << std::endl;
 
 	//std::cout << "GPU net 2" << std::endl;
-	FeatureVector **dv;
-	GPUNet::copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
 	backprop_v2(dv[0]->input, dv[0]->target);
 	//print_net();
 	//std::cout << std::endl;
+	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
+
+
+	net.feed_forward(d.get_training_dataset()->training_set[1]->input);
+	nt.backprop(d.get_training_dataset()->training_set[1]->target);
+	nt.update_weights();
+	feed_forward_v1_2(dv[1]->input);
+	backprop_v2(dv[1]->input, dv[1]->target);
+
+
 	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
 }
 

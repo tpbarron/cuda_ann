@@ -21,7 +21,7 @@
 	}																		\
 }
 
-/*
+
 int main(void) {
 	srand(time(NULL));
 
@@ -43,49 +43,47 @@ int main(void) {
 
 	gnet.init_from_net(net, d);
 	//gnet.test_feed_forward(net, d);
-	//gnet.test_backprop(net, d);
+	gnet.test_backprop(net, d);
 	//gnet.test_reduction();
 
-	//return 0;
 
-	//NetTrainer nt(&net);
-	//Profiler p(&gnet, &net, &nt);
-	//p.set_iterations(50);
-	//p.profile_feed_forward_v1();
-	//p.profile_feed_forward_v1_2();
-	//p.profile_feed_forward_v2();
-	//p.profile_feed_forward_v2_2();
-	//p.profile_cpu_feedforward(d.get_training_dataset()->training_set[0]->input);
 
-	//p.profile_backprop_v1();
-	//p.profile_backprop_v2();
-	//p.profile_cpu_backprop(d.get_training_dataset()->training_set[0]->target);
+//	NetTrainer nt(&net);
+//	Profiler p(&gnet, &net, &nt);
+//	p.set_iterations(50);
+//	p.profile_feed_forward_v1();
+//	p.profile_feed_forward_v1_2();
+//	p.profile_feed_forward_v2();
+//	p.profile_feed_forward_v2_2();
+//	p.profile_cpu_feedforward(d.get_training_dataset()->training_set[0]->input);
+//
+//	p.profile_backprop_v1();
+//	p.profile_backprop_v2();
+//	p.profile_cpu_backprop(d.get_training_dataset()->training_set[0]->target);
 
-	//return 0;
 
-	gnet.set_training_params(0.9, 0.9);
-	gnet.set_stopping_conds(10000, 95.0);
+//	gnet.set_training_params(0.9, 0.9);
+//	gnet.set_stopping_conds(10000, 95.0);
+//
+//	start = clock();
+//	gnet.train_net(d.get_training_dataset());
+//	stop = clock();
+//
+//	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
+//	gnet.print_net();
+//	gnet.write_net("and.net");
 
-	start = clock();
-	gnet.train_net(d.get_training_dataset());
-	stop = clock();
 
-	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
-	//gnet.print_net();
-	//gnet.write_net("and.net");
-
-	return 0;
-
-	NetTrainer nt(&net);
-	nt.set_stopping_conds(10000, 95);
-	nt.set_training_params(.9, .9, false);
-	start = clock();
-	nt.train_net(d.get_training_dataset());
-	stop = clock();
-	std::cout << "CPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
+//	NetTrainer nt(&net);
+//	nt.set_stopping_conds(10000, 95);
+//	nt.set_training_params(.9, .9, false);
+//	start = clock();
+//	nt.train_net(d.get_training_dataset());
+//	stop = clock();
+//	std::cout << "CPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 
 	CUDA_CHECK_RETURN(cudaDeviceReset());
 	std::cout << "device reset\n";
 
 	return 0;
-}*/
+}
