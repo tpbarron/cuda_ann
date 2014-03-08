@@ -378,6 +378,8 @@ __global__ void update_hidden_output_deltas_v2(int nh, int no, float l_rate, flo
 
 	if (no*j+k < (nh+1)*no)
 		delta_ho[no*j + k] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[no*j + k];
+	printf("delta_ho(%d, %d) = %f, l_rate = %f, hidden[%d] = %f, out_err_gradients[%d] = %f, momentum = %f\n",
+				j, k, delta_ho[no*j+k], l_rate, j, hidden[j], k, output_err_gradients[k], momentum);
 }
 
 
@@ -425,7 +427,6 @@ __global__ void hidden_error_gradients_v3(int no, float *sums, float *d_ho_weigh
 
 	sums[j*no + k] = d_ho_weights[j*no + k] * output_err_gradients[k];
 }
-
 /*
  * called with threads(nh)
  *
@@ -435,6 +436,7 @@ __global__ void calc_gradients(float *sums, float *hidden, float*hidden_err_grad
 	int i = threadIdx.x;
 	hidden_err_gradients[i] = hidden[i] * (1 - hidden[i]) * sums[i*blockDim.x];
 }
+
 
 __global__ void update_input_hidden_deltas(int nh, float l_rate, float momentum,
 		float* input, float* hidden_err_gradients, float* delta_ih) {
@@ -463,8 +465,8 @@ __global__ void update_input_hidden_deltas_v2(int ni, int nh, float l_rate, floa
 	if (nh*i+j < (ni+1)*nh)
 		delta_ih[nh*i + j] = l_rate * input[i] * hidden_err_gradients[j] + momentum * delta_ih[nh*i + j];
 
-	//printf("delta_ho(%d, %d) = %f, l_rate = %f, input[%d] = %f, hidden_err_gradients[%d] = %f, momentum = %f\n",
-	//			i, j, delta_ih[nh*i + j], l_rate, i, input[i], j, hidden_err_gradients[j], momentum);
+	printf("delta_ho(%d, %d) = %f, l_rate = %f, input[%d] = %f, hidden_err_gradients[%d] = %f, momentum = %f\n",
+				i, j, delta_ih[nh*i + j], l_rate, i, input[i], j, hidden_err_gradients[j], momentum);
 }
 
 
@@ -588,22 +590,61 @@ __global__ void print_input(int n_input, float *input) {
 }
 
 /*
- * ---------- public -------------
+ * ---------- Constructors -------------
  */
 
+GPUNet::GPUNet() {
+	n_input = 0;
+	GPUNet::init_structure(0, 0, GPUNet::STANDARD);
+	GPUNet::init_vars();
+}
+
 GPUNet::GPUNet(int ni, int no, GPUNet::NetworkStructure net_type) {
-	n_input = ni;
-	n_output = no;
+	n_input = 0;
+	GPUNet::init_structure(ni, no, net_type);
+	GPUNet::init_vars();
+}
 
-	if (net_type == GPUNet::STANDARD) {
-		n_hidden = ceil(2.0/3.0*ni);
-	} else if (net_type == GPU_ARCH_OPT) {
-		n_hidden = 128 / (2.0/3.0*ni) * 128;
-	} else {
-		std::cerr << "Invalid network type: " << net_type << std::endl;
-		exit(1);
+GPUNet::~GPUNet() {
+	cudaFree(d_input);
+	cudaFree(d_hidden);
+	cudaFree(d_output);
+	cudaFree(d_target);
+	cudaFree(d_ih_weights);
+	cudaFree(d_ho_weights);
+	cudaFree(d_ih_deltas);
+	cudaFree(d_ho_deltas);
+	cudaFree(d_hid_err_gradients);
+	cudaFree(d_out_err_gradients);
+
+	delete[] h_output;
+	delete[] gpu_mem;
+}
+
+/*
+ * -------------- public ---------------
+ */
+
+
+void GPUNet::init_structure(int ni, int no, GPUNet::NetworkStructure net_type) {
+	if (n_input != 0) { // constructor initializing nodes has been called, error out
+		std::cerr << "Network has already been initialized" << std::endl;
+	} else if (ni != 0) { // if not empty constructor
+		n_input = ni;
+		n_output = no;
+
+		if (net_type == GPUNet::STANDARD) {
+			n_hidden = ceil(2.0/3.0*ni);
+		} else if (net_type == GPU_ARCH_OPT) {
+			n_hidden = 128 / (2.0/3.0*ni) * 128;
+		} else {
+			std::cerr << "Invalid network type: " << net_type << std::endl;
+			exit(1);
+		}
 	}
+}
 
+void GPUNet::init_vars() {
 	max_epochs = GPU_MAX_EPOCHS;
 	l_rate = GPU_LEARNING_RATE;
 	momentum = GPU_MOMENTUM;
@@ -629,9 +670,6 @@ GPUNet::GPUNet(int ni, int no, GPUNet::NetworkStructure net_type) {
 	d_output = NULL;
 	d_target = NULL;
 
-	d_input_ptr = NULL;
-	d_target_ptr = NULL;
-
 	d_ih_weights = NULL;
 	d_ho_weights = NULL;
 
@@ -654,26 +692,6 @@ GPUNet::GPUNet(int ni, int no, GPUNet::NetworkStructure net_type) {
 		gpu_mem[i] = 0;
 	}
 }
-
-GPUNet::~GPUNet() {
-	cudaFree(d_input);
-	cudaFree(d_hidden);
-	cudaFree(d_output);
-	cudaFree(d_target);
-	cudaFree(d_ih_weights);
-	cudaFree(d_ho_weights);
-	cudaFree(d_ih_deltas);
-	cudaFree(d_ho_deltas);
-	cudaFree(d_hid_err_gradients);
-	cudaFree(d_out_err_gradients);
-
-	delete[] h_output;
-	delete[] gpu_mem;
-}
-
-/*
- * -------------- public ---------------
- */
 
 /*
  * allocate memory on device for
@@ -981,6 +999,7 @@ void GPUNet::get_set_accuracy_mse(thrust::host_vector<FeatureVector*> set, float
 }
 
 void GPUNet::run_training_epoch(thrust::host_vector<FeatureVector*> feature_vecs) {
+	print_net();
 	int incorrect_patterns = 0;
 	float mse = 0, mse_tmp = 0;
 	bool correct_result = true;
@@ -1312,7 +1331,7 @@ bool GPUNet::validate_output(float* desired_output) {
 	CUDA_CHECK_RETURN(cudaMemcpy(h_output, d_output, n_output*sizeof(float), cudaMemcpyDeviceToHost));
 
 	for (int i = 0; i < n_output; ++i) {
-		std::cout << "actual = " << desired_output[i] << ", calc = " << h_output[i] << std::endl;
+		//std::cout << "actual = " << desired_output[i] << ", calc = " << h_output[i] << std::endl;
 		if (abs(desired_output[i] - h_output[i]) > .005)
 			return false;
 	}
@@ -1342,12 +1361,6 @@ bool GPUNet::validate_weights(float *desired_ih_weights, float *desired_ho_weigh
 void GPUNet::test_feed_forward(Net &net, NetData &d) {
 	clock_t start, finish;
 
-	for (int i = 0; i < n_input; ++i) {
-		std::cout << "i = " << i << std::endl;
-		std::cout << d.get_training_dataset()->training_set[0]->input[i] << std::endl;
-	}
-	std::cout << std::endl;
-
 	std::cout << "feed forward CPU" << std::endl;
 	start = clock();
 	net.feed_forward(d.get_training_dataset()->training_set[0]->input);
@@ -1360,15 +1373,15 @@ void GPUNet::test_feed_forward(Net &net, NetData &d) {
 	std::cout << "Validates: " << validate_output(net.outputNeurons) << "\n";
 	CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));
 
-	print_net();
+	//print_net();
 
 	std::cout << "Testing method 1.2" << std::endl;
 	FeatureVector **dv;
 	GPUNet::copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
 	feed_forward_v1_2(dv[0]->input);
 	std::cout << "Validates: " << validate_output(net.outputNeurons) << "\n";
-	net.print_network();
-	print_net();
+	//net.print_network();
+	//print_net();
 	CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));
 
 	/*std::cout << "Testing method 2" << std::endl;

@@ -49,9 +49,12 @@ public:
 		GPU_ARCH_OPT
 	};
 
+	GPUNet();
 	GPUNet(int ni, int no, GPUNet::NetworkStructure net_type);
 	~GPUNet();
 
+	void init_structure(int ni, int no, GPUNet::NetworkStructure net_type);
+	void init_vars();
 	void alloc_dev_mem();
 	void init_from_net(Net &net, NetData &d);
 	void init_net();
@@ -102,13 +105,7 @@ private:
 	clock_t start, finish;
 	int n_input, n_hidden, n_output;
 	float *d_input, *d_hidden, *d_output, *d_target;
-	float **d_input_ptr, **d_target_ptr;
 
-	/*
-	 * Note: This weight storage format doesn't work as well with
-	 * non-fully connected networks. But it is easier in CUDA to work with
-	 * 1D arrays.
-	 */
 	float *d_ih_weights, *d_ho_weights;
 	float *d_ih_deltas, *d_ho_deltas;
 	float *d_hid_err_gradients, *d_out_err_gradients;
