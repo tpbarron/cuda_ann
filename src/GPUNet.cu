@@ -338,9 +338,10 @@ __global__ void output_error_gradients(float* output, float* target, float* outp
 __global__ void output_error_gradients_v2(float* output, float* target, float* output_err_gradients, int no) {
 	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
 
-	if (i < no)
+	if (i < no) {
 		output_err_gradients[i] = calc_output_gradient(output[i], target[i]);
-	//printf("out_err_grad[%d] = %f, output = %f, target = %f\n", i, output_err_gradients[i], output[i], target[i]);
+		printf("out_err_grad[%d] = %f, output = %f, target = %f\n", i, output_err_gradients[i], output[i], target[i]);
+	}
 }
 
 /*
@@ -373,13 +374,17 @@ __global__ void update_hidden_output_deltas_v2(int nh, int no, float l_rate, flo
 
 	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
 
-	int j = x % nh; //input node
-	int k = x % no; //hidden node
+	if (x < (nh+1)*no) { // if in range
+		//NOTE: this was my bug, had (x % nh) not (x % (nh+1))
+		int j = x % (nh+1); //input node
+		int k = x % no; //hidden node
 
-	if (no*j+k < (nh+1)*no)
-		delta_ho[no*j + k] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[no*j + k];
-	printf("delta_ho(%d, %d) = %f, l_rate = %f, hidden[%d] = %f, out_err_gradients[%d] = %f, momentum = %f\n",
-				j, k, delta_ho[no*j+k], l_rate, j, hidden[j], k, output_err_gradients[k], momentum);
+		if (no*j+k < (nh+1)*no) {
+			delta_ho[no*j + k] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[no*j + k];
+			printf("delta_ho(%d, %d) = %f, l_rate = %f, hidden[%d] = %f, out_err_gradients[%d] = %f, momentum = %f\n",
+					j, k, delta_ho[no*j+k], l_rate, j, hidden[j], k, output_err_gradients[k], momentum);
+		}
+	}
 }
 
 
@@ -408,9 +413,10 @@ __global__ void hidden_error_gradients(int no, float* hidden, float* d_ho_weight
 __global__ void hidden_error_gradients_v2(int nh, int no, float* hidden, float* d_ho_weights, float* hidden_err_gradients, float* output_err_gradients) {
 	unsigned int j = blockIdx.x * blockDim.x+threadIdx.x;
 
-	if (j < (nh+1)*no)
+	if (j < nh) { //NOTE: another bug, had (j < (nh+1)*no), only nh nodes need calculated
 		hidden_err_gradients[j] = calc_hidden_gradient(j, no, hidden, d_ho_weights, output_err_gradients);
-	//printf("hidden_err_grad[%d] = %f\n", j, hidden_err_gradients[j]);
+		printf("hidden_err_grad[%d] = %f\n", j, hidden_err_gradients[j]);
+	}
 }
 
 
@@ -459,14 +465,17 @@ __global__ void update_input_hidden_deltas_v2(int ni, int nh, float l_rate, floa
 		float* input, float* hidden_err_gradients, float* delta_ih) {
 	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
 
-	int i = x % ni; //input node
-	int j = x % nh; //hidden node
+	if (x < (ni+1)*nh) {
+		int i = x % (ni+1); //input node, NOTE: same bug as before
+		int j = x % nh; //hidden node
 
-	if (nh*i+j < (ni+1)*nh)
-		delta_ih[nh*i + j] = l_rate * input[i] * hidden_err_gradients[j] + momentum * delta_ih[nh*i + j];
+		if (nh*i+j < (ni+1)*nh) {
+			delta_ih[nh*i + j] = l_rate * input[i] * hidden_err_gradients[j] + momentum * delta_ih[nh*i + j];
 
-	printf("delta_ho(%d, %d) = %f, l_rate = %f, input[%d] = %f, hidden_err_gradients[%d] = %f, momentum = %f\n",
-				i, j, delta_ih[nh*i + j], l_rate, i, input[i], j, hidden_err_gradients[j], momentum);
+			printf("delta_ih(%d, %d) = %f, l_rate = %f, input[%d] = %f, hidden_err_gradients[%d] = %f, momentum = %f\n",
+					i, j, delta_ih[nh*i + j], l_rate, i, input[i], j, hidden_err_gradients[j], momentum);
+		}
+	}
 }
 
 
@@ -489,11 +498,16 @@ __global__ void update_weights(float *d_weights, float* deltas) {
 __global__ void update_weights_v2(int n1, int n2, float *d_weights, float *deltas) {
 	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
 
-	int i = x % n1; //layer 1 node
-	int j = x % n2; //layer 2 node
+	if (x < (n1+1)*n2) {
+		int i = x % (n1+1); //layer 1 node, NOTE: same bug
+		int j = x % n2; //layer 2 node
 
-	if (i*n2+j < (n1+1)*n2)
-		d_weights[i*n2 + j] += deltas[i*n2 + j];
+		if (i*n2+j < (n1+1)*n2) {
+			d_weights[i*n2 + j] += deltas[i*n2 + j];
+			printf("d_weights(%d, %d) = %f, deltas(%d, %d) = %f\n",
+								i, j, d_weights[n2*i+j], i, j, deltas[n2*i + j]);
+		}
+	}
 }
 
 
@@ -891,10 +905,10 @@ int GPUNet::get_num_output() {
 
 void GPUNet::train_net(TrainingDataSet *tset) {
 	std::cout << std::endl << " Neural Network Training Starting: " << std::endl
-			<< "==========================================================================" << std::endl
+			<< "--------------------------------------------------------------------------" << std::endl
 			<< " LR: " << l_rate << ", Momentum: " << momentum << ", Max Epochs: " << max_epochs << std::endl
 			<< " " << n_input << " Input Neurons, " << n_hidden << " Hidden Neurons, " << n_output << " Output Neurons" << std::endl
-			<< "==========================================================================" << std::endl << std::endl;
+			<< "--------------------------------------------------------------------------" << std::endl << std::endl;
 
 	FeatureVector** d_training_set;
 	//FeatureVector* d_generalization_set;
@@ -1396,50 +1410,76 @@ void GPUNet::test_feed_forward(Net &net, NetData &d) {
 }
 
 void GPUNet::test_backprop(Net &net, NetData &d) {
-	//clock_t start, finish;
-
-	//copy target to dev
-	CUDA_CHECK_RETURN(cudaMemcpy(d_target, d.get_training_dataset()->training_set[0]->target, (n_output)*sizeof(float), cudaMemcpyHostToDevice));
-
 	NetTrainer nt(&net);
-	//std::cout << "CPU net 0" << std::endl;
-	//net.print_network();
+	std::cout << "CPU net 0" << std::endl;
+	net.print_network();
 
 	net.feed_forward(d.get_training_dataset()->training_set[0]->input);
-	//std::cout << "CPU net 1" << std::endl;
-	//net.print_network();
+	std::cout << "CPU net 1" << std::endl;
+	net.print_network();
 
 	nt.backprop(d.get_training_dataset()->training_set[0]->target);
 	nt.update_weights();
-	//std::cout << "CPU net 2" << std::endl;
-	//net.print_network();
+	std::cout << "CPU net 2" << std::endl;
+	net.print_network();
 
 	std::cout << "Testing backprop_v2" << std::endl;
-	//std::cout << std::endl << "GPU net 0" << std::endl;
+	FeatureVector **dv;
+	GPUNet::copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
+
+	std::cout << std::endl << "GPU net 0" << std::endl;
+	print_net();
+	std::cout << std::endl;
+
+	feed_forward_v1_2(dv[0]->input);
+	std::cout << "GPU net 1" << std::endl;
+	print_net();
+	std::cout << std::endl;
+
+	std::cout << "GPU net 2" << std::endl;
+	backprop_v2(dv[0]->input, dv[0]->target);
+	print_net();
+	std::cout << std::endl;
+	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
+
+
+//	net.feed_forward(d.get_training_dataset()->training_set[1]->input);
+//	nt.backprop(d.get_training_dataset()->training_set[1]->target);
+//	nt.update_weights();
+//	feed_forward_v1_2(dv[1]->input);
+//	backprop_v2(dv[1]->input, dv[1]->target);
+//
+//
+//	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
+}
+
+void GPUNet::run_parallel(Net &net, NetData &d) {
+	std::cout << "Running in parallel" <<std::endl;
 
 	FeatureVector **dv;
 	GPUNet::copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
 
-	feed_forward_v1_2(dv[0]->input);
-	//std::cout << "GPU net 1" << std::endl;
-	//print_net();
-	//std::cout << std::endl;
+	NetTrainer nt(&net);
 
-	//std::cout << "GPU net 2" << std::endl;
-	backprop_v2(dv[0]->input, dv[0]->target);
-	//print_net();
-	//std::cout << std::endl;
-	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
+	int e = 0;
+	std::string r = "";
+	while (true) {
+		std::cout << "Epoch " << e++ << std::endl;
+		for (int i = 0; i < d.get_training_dataset()->training_set.size(); ++i) {
+			net.feed_forward(d.get_training_dataset()->training_set[i]->input);
+			nt.backprop(d.get_training_dataset()->training_set[i]->target);
+			nt.update_weights();
 
+			feed_forward_v1_2(dv[0]->input);
+			backprop_v2(dv[0]->input, dv[0]->target);
 
-	net.feed_forward(d.get_training_dataset()->training_set[1]->input);
-	nt.backprop(d.get_training_dataset()->training_set[1]->target);
-	nt.update_weights();
-	feed_forward_v1_2(dv[1]->input);
-	backprop_v2(dv[1]->input, dv[1]->target);
-
-
-	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
+			std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
+			std::getline(std::cin, r);
+			if (r == "exit") {
+				return;
+			}
+		}
+	}
 }
 
 

@@ -22,6 +22,29 @@
 }
 
 
+void profile(GPUNet &gnet, Net &net, NetData &d) {
+	NetTrainer nt(&net);
+	Profiler p(&gnet, &net, &nt);
+	p.set_iterations(50);
+	p.profile_feed_forward_v1();
+	p.profile_feed_forward_v1_2();
+	p.profile_feed_forward_v2();
+	p.profile_feed_forward_v2_2();
+	p.profile_cpu_feedforward(d.get_training_dataset()->training_set[0]->input);
+
+	p.profile_backprop_v1();
+	p.profile_backprop_v2();
+	p.profile_cpu_backprop(d.get_training_dataset()->training_set[0]->target);
+}
+
+void test(GPUNet &gnet, Net &net, NetData &d) {
+	gnet.init_from_net(net, d);
+	//gnet.test_feed_forward(net, d);
+	gnet.test_backprop(net, d);
+	//gnet.test_reduction();
+}
+
+
 int main(void) {
 	srand(time(NULL));
 
@@ -34,41 +57,24 @@ int main(void) {
 
 	Net net(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
 	GPUNet gnet(d.num_inputs(), d.num_targets(), GPUNet::STANDARD);
-
 	gnet.alloc_dev_mem();
-	gnet.init_net();
+	//gnet.init_net();
+	//std::cout << "Dev 0: " << gnet.current_mem_usage(0) << std::endl;
 
-	std::cout << "Dev 0: " << gnet.current_mem_usage(0) << std::endl;
+	test(gnet, net, d);
+//	gnet.run_parallel(net, d);
 
-	gnet.init_from_net(net, d);
-	gnet.test_feed_forward(net, d);
-	gnet.test_backprop(net, d);
-	//gnet.test_reduction();
 
-	//gnet.print_net();
-
-//	NetTrainer nt(&net);
-//	Profiler p(&gnet, &net, &nt);
-//	p.set_iterations(50);
-//	p.profile_feed_forward_v1();
-//	p.profile_feed_forward_v1_2();
-//	p.profile_feed_forward_v2();
-//	p.profile_feed_forward_v2_2();
-//	p.profile_cpu_feedforward(d.get_training_dataset()->training_set[0]->input);
+//	gnet.set_training_params(0.9, 0.9);
+//	gnet.set_stopping_conds(10000, 95.0);
 //
-//	p.profile_backprop_v1();
-//	p.profile_backprop_v2();
-//	p.profile_cpu_backprop(d.get_training_dataset()->training_set[0]->target);
+//	start = clock();
+//	gnet.train_net(d.get_training_dataset());
+//	stop = clock();
+//
+//	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 
 
-	gnet.set_training_params(0.9, 0.9);
-	gnet.set_stopping_conds(10000, 95.0);
-
-	start = clock();
-	gnet.train_net(d.get_training_dataset());
-	stop = clock();
-
-	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 
 //	gnet.print_net();
 //	gnet.write_net("and.net");

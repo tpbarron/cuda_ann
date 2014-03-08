@@ -30,7 +30,7 @@
 #include <thrust/device_vector.h>
 
 //defaults
-const float GPU_LEARNING_RATE = 0.001;
+const float GPU_LEARNING_RATE = 0.7;
 const float GPU_MOMENTUM = 0.9;
 const long GPU_MAX_EPOCHS = 1500;
 const int GPU_DESIRED_ACCURACY = 90;
@@ -87,6 +87,8 @@ public:
 	void test_backprop(Net &net, NetData &d);
 	void test_feed_forward(Net &net, NetData &d);
 	void test_reduction();
+
+	void run_parallel(Net &net, NetData &d);
 
 	size_t current_mem_usage(int dev);
 
