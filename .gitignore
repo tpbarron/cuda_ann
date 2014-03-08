@@ -13,6 +13,8 @@ tmp/
 local.properties
 .settings/
 .loadpath
+.project
+.cproject
 
 # External tool builders
 .externalToolBuilders/
