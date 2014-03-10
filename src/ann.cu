@@ -51,7 +51,7 @@ int main(void) {
 	time_t start, stop;
 
 	NetData d;
-	if (!d.load_file("datasets/and.dat"))
+	if (!d.load_file("datasets/norm.dat"))
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
 
@@ -65,17 +65,17 @@ int main(void) {
 	//std::cout << "Dev 0: " << gnet.current_mem_usage(0) << std::endl;
 
 //	test(gnet, net, d);
-	gnet.run_parallel(net, d);
+//	gnet.run_parallel(net, d);
 
 
-//	gnet.set_training_params(0.9, 0.9);
-//	gnet.set_stopping_conds(10000, 95.0);
-//
-//	start = clock();
-//	gnet.train_net(d.get_training_dataset());
-//	stop = clock();
-//
-//	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
+	gnet.set_training_params(0.9, 0.9);
+	gnet.set_stopping_conds(10000, 95.0);
+
+	start = clock();
+	gnet.train_net(d.get_training_dataset());
+	stop = clock();
+
+	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 
 //	gnet.print_net();
 //	gnet.write_net("and.net");

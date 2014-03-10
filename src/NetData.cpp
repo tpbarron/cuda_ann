@@ -72,7 +72,7 @@ bool NetData::load_file(std::string fname) {
 
 		//split data set
 		training_data_end_index = (int) (1.0 * data.size());
-		//training_data_end_index = (int) (0.6 * data.size());
+		training_data_end_index = (int) (0.6 * data.size());
 		int gSize = (int) (ceil(0.2 * data.size()));
 		//int vSize = (int) (data.size() - training_data_end_index - gSize);
 
@@ -80,7 +80,6 @@ bool NetData::load_file(std::string fname) {
 		for (int i = 0; i < training_data_end_index; ++i)
 			tset.training_set.push_back(data[i]);
 
-		/*
 		//generalization set
 		for (int i = training_data_end_index; i < training_data_end_index + gSize; ++i)
 			tset.generalization_set.push_back(data[i]);
@@ -88,7 +87,9 @@ bool NetData::load_file(std::string fname) {
 		//validation set
 		for (int i = training_data_end_index + gSize; i < (int)data.size(); i++)
 			tset.validation_set.push_back(data[i]);
-		*/
+
+		tset.n = data.size();
+
 		//print success
 		std::cout << "Data file: " << fname <<
 				"\nRead Complete: " << data.size() << " patterns loaded"  << std::endl;

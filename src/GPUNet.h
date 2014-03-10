@@ -89,6 +89,7 @@ public:
 
 	void run_parallel(Net &net, NetData &d);
 
+	int num_patterns_copyable(TrainingDataSet *tset);
 	size_t current_mem_usage(int dev);
 
 

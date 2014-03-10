@@ -339,7 +339,7 @@ __global__ void output_error_gradients_v2(float* output, float* target, float* o
 
 	if (i < no) {
 		output_err_gradients[i] = calc_output_gradient(output[i], target[i]);
-		printf("out_err_grad[%d] = %f, output = %f, target = %f\n", i, output_err_gradients[i], output[i], target[i]);
+		//printf("out_err_grad[%d] = %f, output = %f, target = %f\n", i, output_err_gradients[i], output[i], target[i]);
 	}
 }
 
@@ -378,11 +378,9 @@ __global__ void update_hidden_output_deltas_v2(int nh, int no, float l_rate, flo
 		int j = x % (nh+1); //input node
 		int k = x % no; //hidden node
 
-		if (no*j+k < (nh+1)*no) {
-			delta_ho[no*j + k] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[no*j + k];
-			printf("delta_ho(%d, %d) = %f, l_rate = %f, hidden[%d] = %f, out_err_gradients[%d] = %f, momentum = %f\n",
-					j, k, delta_ho[no*j+k], l_rate, j, hidden[j], k, output_err_gradients[k], momentum);
-		}
+		delta_ho[no*j + k] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[no*j + k];
+		//printf("delta_ho(%d, %d) = %f, l_rate = %f, hidden[%d] = %f, out_err_gradients[%d] = %f, momentum = %f\n",
+		//			j, k, delta_ho[no*j+k], l_rate, j, hidden[j], k, output_err_gradients[k], momentum);
 	}
 }
 
@@ -414,7 +412,7 @@ __global__ void hidden_error_gradients_v2(int nh, int no, float* hidden, float* 
 
 	if (j < nh) { //NOTE: another bug, had (j < (nh+1)*no), only nh nodes need calculated
 		hidden_err_gradients[j] = calc_hidden_gradient(j, no, hidden, d_ho_weights, output_err_gradients);
-		printf("hidden_err_grad[%d] = %f\n", j, hidden_err_gradients[j]);
+		//printf("hidden_err_grad[%d] = %f\n", j, hidden_err_gradients[j]);
 	}
 }
 
@@ -468,12 +466,10 @@ __global__ void update_input_hidden_deltas_v2(int ni, int nh, float l_rate, floa
 		int i = x % (ni+1); //input node, NOTE: same bug as before
 		int j = x % nh; //hidden node
 
-		if (nh*i+j < (ni+1)*nh) {
-			delta_ih[nh*i + j] = l_rate * input[i] * hidden_err_gradients[j] + momentum * delta_ih[nh*i + j];
+		delta_ih[nh*i + j] = l_rate * input[i] * hidden_err_gradients[j] + momentum * delta_ih[nh*i + j];
 
-			printf("delta_ih(%d, %d) = %f, l_rate = %f, input[%d] = %f, hidden_err_gradients[%d] = %f, momentum = %f\n",
-					i, j, delta_ih[nh*i + j], l_rate, i, input[i], j, hidden_err_gradients[j], momentum);
-		}
+		//printf("delta_ih(%d, %d) = %f, l_rate = %f, input[%d] = %f, hidden_err_gradients[%d] = %f, momentum = %f\n",
+		//			i, j, delta_ih[nh*i + j], l_rate, i, input[i], j, hidden_err_gradients[j], momentum);
 	}
 }
 
@@ -482,14 +478,6 @@ __global__ void update_input_hidden_deltas_v2(int ni, int nh, float l_rate, floa
 /*
  * weight update
  */
-
-//blocks(n_layer1), threads(n_layer0+1)
-__global__ void update_weights(float *d_weights, float* deltas) {
-	int j = blockIdx.x; //layer1
-	int i = threadIdx.x; //layer0
-
-	d_weights[i*gridDim.x + j] += deltas[i*gridDim.x + j];
-}
 
 /*
  * called generically with power of 2 threads
@@ -501,11 +489,8 @@ __global__ void update_weights_v2(int n1, int n2, float *d_weights, float *delta
 		int i = x % (n1+1); //layer 1 node, NOTE: same bug
 		int j = x % n2; //layer 2 node
 
-		if (i*n2+j < (n1+1)*n2) {
-			d_weights[i*n2 + j] += deltas[i*n2 + j];
-			printf("d_weights(%d, %d) = %f, deltas(%d, %d) = %f\n",
-								i, j, d_weights[n2*i+j], i, j, deltas[n2*i + j]);
-		}
+		d_weights[i*n2 + j] += deltas[i*n2 + j];
+		//printf("d_weights(%d, %d) = %f, deltas(%d, %d) = %f\n", i, j, d_weights[n2*i+j], i, j, deltas[n2*i + j]);
 	}
 }
 
@@ -785,11 +770,13 @@ void GPUNet::init_net() {
 	curand_setup<<<1, (n_input+1)*n_hidden>>>(state);
 	dim3 ih_threads(n_input+1, n_hidden);
 	init_weights<<<1, ih_threads>>>(d_ih_weights, state);
+	CUDA_CHECK_RETURN(cudaFree(state));
 
 	CUDA_CHECK_RETURN(cudaMalloc(&state, (n_hidden+1)*n_output*sizeof(curandState)));
 	curand_setup<<<1, (n_hidden+1)*n_output>>>(state);
 	dim3 ho_threads(n_hidden+1, n_output);
 	init_weights<<<1, ho_threads>>>(d_ho_weights, state);
+	CUDA_CHECK_RETURN(cudaFree(state));
 
 	//init deltas to 0
 	init_deltas<<<1, ih_threads>>>(d_ih_deltas);
@@ -900,48 +887,43 @@ int GPUNet::get_num_output() {
 	return n_output;
 }
 
-
+int GPUNet::num_patterns_copyable(TrainingDataSet *tset) {
+	//num patterns = integer div of available memory / mem for single pattern
+	int bytes_per_pattern = sizeof(float)*((n_input+1)+(n_output));
+	int cur_dev = get_current_device();
+	int available_mem = total_dev_mem(cur_dev) - current_mem_usage(cur_dev);
+	return available_mem / bytes_per_pattern;
+}
 
 void GPUNet::train_net(TrainingDataSet *tset) {
-	std::cout << std::endl << " Neural Network Training Starting: " << std::endl
-			<< "--------------------------------------------------------------------------" << std::endl
-			<< " LR: " << l_rate << ", Momentum: " << momentum << ", Max Epochs: " << max_epochs << std::endl
-			<< " " << n_input << " Input Neurons, " << n_hidden << " Hidden Neurons, " << n_output << " Output Neurons" << std::endl
-			<< "--------------------------------------------------------------------------" << std::endl << std::endl;
+	std::cout << std::endl << "Neural Network Training Starting: " << std::endl
+			<< "----------------------------------------------------" << std::endl
+			<< "LR: " << l_rate << ", Momentum: " << momentum << ", Max Epochs: " << max_epochs << std::endl
+			<< n_input << " Input Neurons, " << n_hidden << " Hidden Neurons, " << n_output << " Output Neurons" << std::endl
+			<< "----------------------------------------------------" << std::endl << std::endl;
 
 	FeatureVector** d_training_set;
-	//FeatureVector* d_generalization_set;
-	//FeatureVector* d_validation_set;
-	//TODO: ultimately replace this with a network partitioning call
-	if (dataset_size(tset) + current_mem_usage(get_current_device()) < total_dev_mem(get_current_device())) {
-
+	FeatureVector** d_generalization_set;
+	FeatureVector** d_validation_set;
+	if (num_patterns_copyable(tset) >= tset->size()) {
+		//copy all patterns
 		start = clock();
-		//copy_to_device(tset->training_set, &d_training_set);
-		//copy_to_device_biased(tset->training_set, &d_training_set);
-		//copy_to_device_host_array(tset->training_set, &d_training_set);
-		//copy_to_device_host_array_biased(tset->training_set, &d_training_set);
 		copy_to_device_host_array_ptrs_biased(tset->training_set, &d_training_set);
+		copy_to_device_host_array_ptrs_biased(tset->generalization_set, &d_generalization_set);
+		copy_to_device_host_array_ptrs_biased(tset->validation_set, &d_validation_set);
 		finish = clock();
-
 		std::cout << "Copying entire dataset to device: " << ((float)finish-start)/CLOCKS_PER_SEC << std::endl;
-
-
-		//for (int i = 0; i < tset->training_set.size(); ++i) {
-		//	print_input<<<1,1>>>(n_input, d_training_set[i]->input);
-		//	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-		//	print_target<<<1,1>>>(n_output, d_training_set[i]->target);
-		//	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-		//}
+	} else {
+		//TODO: what do I do?
+		// Copy as many as possible
+		//
+		// Should this be done in a separable thread
 	}
 
-	//return;
-
-	//reset epoch and log counters
 	epoch = 0;
-
 	//train network using training dataset for training and generalization dataset for testing
-	while ((trainingSetAccuracy < desired_acc) && epoch < max_epochs) {
-	//while ((trainingSetAccuracy < desired_acc || generalizationSetAccuracy < desired_acc) && epoch < max_epochs) {
+	//while ((trainingSetAccuracy < desired_acc) && epoch < max_epochs) {
+	while ((trainingSetAccuracy < desired_acc || generalizationSetAccuracy < desired_acc) && epoch < max_epochs) {
 		//store previous accuracy
 		float previousTAccuracy = trainingSetAccuracy;
 		float previousGAccuracy = generalizationSetAccuracy;
@@ -951,18 +933,21 @@ void GPUNet::train_net(TrainingDataSet *tset) {
 		//std::cout << "Calling run_training_epoch_dev" << std::endl;
 		run_training_epoch_dev(d_training_set, tset->training_set.size());
 
-		//return;
 
 		//get generalization set accuracy and MSE
 		//get_set_accuracy_mse(tset->generalization_set, &generalizationSetAccuracy, &generalizationSetMSE);
-		//get_set_accuracy_mse_dev(d_generalization_set, tset->generalization_set.size(), &generalizationSetAccuracy, &generalizationSetMSE);
+		get_set_accuracy_mse_dev(d_generalization_set, tset->generalization_set.size(), &generalizationSetAccuracy, &generalizationSetMSE);
 
 		//print out change in training /generalization accuracy (only if a change is greater than a percent)
-		//if (ceil(previousTAccuracy) != ceil(trainingSetAccuracy) || ceil(previousGAccuracy) != ceil(generalizationSetAccuracy)) {
+		if (ceil(previousTAccuracy) != ceil(trainingSetAccuracy) || ceil(previousGAccuracy) != ceil(generalizationSetAccuracy)) {
 			std::cout << "Epoch: " << epoch;
 			std::cout << "; Test Set Acc:" << trainingSetAccuracy << "%, MSE: " << trainingSetMSE;
 			std::cout << ";\tGSet Acc:" << generalizationSetAccuracy << "%, MSE: " << generalizationSetMSE << std::endl;
-		//}
+		}
+
+
+		previousTAccuracy = trainingSetAccuracy;
+		previousGAccuracy = generalizationSetAccuracy;
 
 		//once training set is complete increment epoch
 		++epoch;
@@ -970,11 +955,20 @@ void GPUNet::train_net(TrainingDataSet *tset) {
 
 	//get validation set accuracy and MSE
 	//get_set_accuracy_mse(tset->validation_set, &validationSetAccuracy, &validationSetMSE);
+	get_set_accuracy_mse_dev(d_validation_set, tset->validation_set.size(), &validationSetAccuracy, &validationSetMSE);
 
 	//out validation accuracy and MSE
 	std::cout << std::endl << "Training Complete. Elapsed Epochs: " << epoch << std::endl;
 	std::cout << "\tValidation Set Accuracy: " << validationSetAccuracy << std::endl;
 	std::cout << "\tValidation Set MSE: " << validationSetMSE << std::endl << std::endl;
+
+	//free training set
+	for (int i = 0; i < tset->training_set.size(); ++i) {
+		CUDA_CHECK_RETURN(cudaFree(d_training_set[i]->input));
+		CUDA_CHECK_RETURN(cudaFree(d_training_set[i]->target));
+		free(d_training_set[i]);
+	}
+	free(d_training_set);
 }
 
 void GPUNet::get_set_accuracy_mse(thrust::host_vector<FeatureVector*> set, float* s_acc, float* s_mse) {
@@ -1084,17 +1078,11 @@ void GPUNet::get_set_accuracy_mse_dev(FeatureVector **feature_vecs, size_t n_fea
 void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features) {
 	int incorrect_patterns = 0;
 	float mse = 0, mse_tmp = 0;
-	bool correct_result = true;
+	bool correct_result;
 
 	for (size_t i = 0; i < n_features; ++i) {
 		mse_tmp = 0;
 		correct_result = true;
-
-		//print_input<<<1,1>>>(n_input, feature_vecs[i]->input);
-		//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-		//print_target<<<1,1>>>(n_output, feature_vecs[i]->target);
-		//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
 		feed_forward_v1_2(feature_vecs[i]->input);
 
 		//TODO: maintain these variables on the GPU side
@@ -1115,8 +1103,6 @@ void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_featu
 		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	}
 
-	//std::cout << "MSE sum: " << mse << std::endl;
-	//std::cout << "inc patterns: " << incorrect_patterns << std::endl;
 	//update training accuracy and MSE
 	trainingSetAccuracy = 100 - ((float)incorrect_patterns/n_features * 100);
 	trainingSetMSE = mse / (n_output * n_features);
@@ -1230,8 +1216,6 @@ void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
 }
 
 void GPUNet::feed_forward_v1() {
-	//std::cout << "feed forward GPU method 1" << std::endl;
-	//start = clock();
 	feed_forward_layer_v1<<<1, n_hidden>>>(n_input, n_hidden, d_input, d_hidden, d_ih_weights);
 	// must finish previous layer before computing next
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -1240,8 +1224,6 @@ void GPUNet::feed_forward_v1() {
 
 	//sync before measuring time
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	//finish = clock();
-	//std::cout << "kernel method 1 evaluated: " << ((float)(finish-start)) / CLOCKS_PER_SEC << "s\n\n";
 }
 
 void GPUNet::feed_forward_v1_2(float *d_inp) {
