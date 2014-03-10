@@ -242,17 +242,6 @@ int Net::clamp_output(float a) {
 	}
 }
 
-/*int Net::clamp_output(float a) {
-	if (a < -0.8) {
-		return -1;
-	} else if (a > 0.8) {
-		return 1;
-	} else {
-		return 0;
-	}
-}*/
-
-
 float* Net::feed_forward_input(float *input) {
 	feed_forward(input);
 	float *results = new float[Net::n_output];

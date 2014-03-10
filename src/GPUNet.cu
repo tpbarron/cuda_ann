@@ -90,8 +90,7 @@ __global__ void init_nodes_output(float *output) {
 //block(1), threads(n_layer1+1, n_layer2)
 __global__ void init_weights(float *weights, curandState *state) {
 	// r is the range for random values
-	__shared__ float r; r = 1.0 / sqrt((float)blockDim.x-1);
-	__syncthreads();
+	float r = 1.0 / sqrt((float)blockDim.x-1);
 
 	int node_l1 = threadIdx.x;
 	int node_l2 = threadIdx.y;
@@ -1419,7 +1418,6 @@ void GPUNet::test_backprop(Net &net, NetData &d) {
 	net.print_network();
 
 	nt.backprop(d.get_training_dataset()->training_set[0]->target);
-	nt.update_weights();
 	std::cout << "CPU net 2" << std::endl;
 	net.print_network();
 
@@ -1441,7 +1439,6 @@ void GPUNet::test_backprop(Net &net, NetData &d) {
 	print_net();
 	std::cout << std::endl;
 	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
-
 
 //	net.feed_forward(d.get_training_dataset()->training_set[1]->input);
 //	nt.backprop(d.get_training_dataset()->training_set[1]->target);
@@ -1468,11 +1465,14 @@ void GPUNet::run_parallel(Net &net, NetData &d) {
 		for (int i = 0; i < d.get_training_dataset()->training_set.size(); ++i) {
 			net.feed_forward(d.get_training_dataset()->training_set[i]->input);
 			nt.backprop(d.get_training_dataset()->training_set[i]->target);
-			nt.update_weights();
 
 			feed_forward_v1_2(dv[0]->input);
 			backprop_v2(dv[0]->input, dv[0]->target);
 
+			std::cout << "CPU network" << std::endl;
+			net.print_network();
+			std::cout << "GPU network" << std::endl;
+			print_net();
 			std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
 			std::getline(std::cin, r);
 			if (r == "exit") {

@@ -12,7 +12,6 @@
 #include "Net.h"
 
 //defaults
-const bool CPU_USE_BATCH = false;
 const float CPU_LEARNING_RATE = 0.7;
 const float CPU_MOMENTUM = 0.9;
 const long CPU_MAX_EPOCHS = 1500;
@@ -28,9 +27,8 @@ public:
 
 	void set_learning_rate(float lr);
 	void set_momentum(float m);
-	void use_batch(bool b);
 
-	void set_training_params(float lr, float m, bool b);
+	void set_training_params(float lr, float m);
 	void set_max_epochs(int max_epochs);
 	void set_desired_accuracy(float acc);
 	void set_stopping_conds(int me, float acc);
@@ -48,7 +46,6 @@ private:
 
 	float l_rate;
 	float momentum;
-	bool batching;
 
 	float desired_acc;
 

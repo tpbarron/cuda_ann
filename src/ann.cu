@@ -58,11 +58,14 @@ int main(void) {
 	Net net(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
 	GPUNet gnet(d.num_inputs(), d.num_targets(), GPUNet::STANDARD);
 	gnet.alloc_dev_mem();
+	gnet.init_from_net(net, d);
+
 	//gnet.init_net();
+	//gnet.print_net();
 	//std::cout << "Dev 0: " << gnet.current_mem_usage(0) << std::endl;
 
-	test(gnet, net, d);
-//	gnet.run_parallel(net, d);
+//	test(gnet, net, d);
+	gnet.run_parallel(net, d);
 
 
 //	gnet.set_training_params(0.9, 0.9);
@@ -74,15 +77,13 @@ int main(void) {
 //
 //	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 
-
-
 //	gnet.print_net();
 //	gnet.write_net("and.net");
 
 
 //	NetTrainer nt(&net);
 //	nt.set_stopping_conds(10000, 95);
-//	nt.set_training_params(.9, .9, false);
+//	nt.set_training_params(.9, .9);
 //	start = clock();
 //	nt.train_net(d.get_training_dataset());
 //	stop = clock();

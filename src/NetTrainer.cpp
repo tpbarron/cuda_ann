@@ -12,7 +12,6 @@
 NetTrainer::NetTrainer(Net *net) {
 
 	NetTrainer::net = net;
-	NetTrainer::batching = CPU_USE_BATCH;
 	NetTrainer::max_epochs = CPU_MAX_EPOCHS;
 	NetTrainer::l_rate = CPU_LEARNING_RATE;
 	NetTrainer::momentum = CPU_MOMENTUM;
@@ -81,14 +80,9 @@ void NetTrainer::set_momentum(float m) {
 	momentum = m;
 }
 
-void NetTrainer::use_batch(bool b) {
-	batching = b;
-}
-
-void NetTrainer::set_training_params(float lr, float m, bool b) {
+void NetTrainer::set_training_params(float lr, float m) {
 	l_rate = lr;
 	momentum = m;
-	batching = b;
 }
 
 void NetTrainer::set_max_epochs(int me) {
@@ -187,10 +181,6 @@ void NetTrainer::run_training_epoch(thrust::host_vector<FeatureVector*> feature_
 
 	}//end for
 
-	//if using batch learning - update the weights
-	if (batching)
-		update_weights();
-
 	//update training accuracy and MSE
 	trainingSetAccuracy = 100 - ((float)incorrectPatterns/feature_vecs.size() * 100);
 	trainingSetMSE = mse / (net->n_output * feature_vecs.size());
@@ -219,10 +209,7 @@ void NetTrainer::backprop(float* targets) {
 		//for all nodes in hidden layer and bias neuron
 		for (int j = 0; j <= net->n_hidden; ++j) {
 			//calculate change in weight
-			if (!batching)
-				deltaHiddenOutput[j][k] = l_rate * net->hiddenNeurons[j] * outputErrorGradients[k] + momentum * deltaHiddenOutput[j][k];
-			else
-				deltaHiddenOutput[j][k] = l_rate * net->hiddenNeurons[j] * outputErrorGradients[k];
+			deltaHiddenOutput[j][k] = l_rate * net->hiddenNeurons[j] * outputErrorGradients[k] + momentum * deltaHiddenOutput[j][k];
 		}
 	}
 
@@ -249,10 +236,7 @@ void NetTrainer::backprop(float* targets) {
 		//for all nodes in input layer and bias neuron
 		for (int i = 0; i <= net->n_input; ++i) {
 			//calculate change in weight
-			if (!batching)
-				deltaInputHidden[i][j] = l_rate * net->inputNeurons[i] * hiddenErrorGradients[j] + momentum * deltaInputHidden[i][j];
-			else
-				deltaInputHidden[i][j] = l_rate * net->inputNeurons[i] * hiddenErrorGradients[j];
+			deltaInputHidden[i][j] = l_rate * net->inputNeurons[i] * hiddenErrorGradients[j] + momentum * deltaInputHidden[i][j];
 		}
 	}
 
@@ -272,46 +256,22 @@ void NetTrainer::backprop(float* targets) {
 	std::cout << std::endl;
 
 
-	//if using stochastic learning update the weights immediately
-	if (!batching) {
-		//std::cout << "not batching, updating weights \n";
-		update_weights();
-	}
+	//stochastic learning update the weights immediately
+	update_weights();
 }
 
 void NetTrainer::update_weights() {
 	//input -> hidden weights
 	for (int i = 0; i <= net->n_input; i++) {
 		for (int j = 0; j < net->n_hidden; j++) {
-			//update weight
-			//if (net->hiddenNeurons[j] < 0) {
-			//	net->wInputHidden[i][j] -= deltaInputHidden[i][j];
-			//} else {
-			//	net->wInputHidden[i][j] += deltaInputHidden[i][j];
-			//}
-
 			net->set_ih_weight(i, j, net->get_ih_weight(i, j) + deltaInputHidden[i][j]);
-
-			//clear delta only if using batch (previous delta is needed for momentum
-			if (batching)
-				deltaInputHidden[i][j] = 0;
 		}
 	}
 
 	//hidden -> output weights
 	for (int j = 0; j <= net->n_hidden; j++) {
 		for (int k = 0; k < net->n_output; k++) {
-			//update weight
-			//if (net->outputNeurons[0] < 0) {
-			//	net->wHiddenOutput[j][k] -= deltaHiddenOutput[j][k];
-			//} else {
-			//	net->wHiddenOutput[j][k] += deltaHiddenOutput[j][k];
-			//}
-
 			net->set_ho_weight(j, k, net->get_ho_weight(j, k) + deltaHiddenOutput[j][k]);
-			//clear delta only if using batch (previous delta is needed for momentum)
-			if (batching)
-				deltaHiddenOutput[j][k] = 0;
 		}
 	}
 }
