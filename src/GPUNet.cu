@@ -1706,9 +1706,9 @@ void GPUNet::copy_to_device(thrust::host_vector<FeatureVector*> &hv, FeatureVect
 	}
 
 	std::cout << "precopy"<<std::endl;
-    // Copy to device Memory
-    CUDA_CHECK_RETURN(cudaMemcpy(*dv, host_dv_tmp, hv.size()*sizeof(FeatureVector*), cudaMemcpyHostToDevice));
-    std::cout << "postcopy"<<std::endl;
+	// Copy to device Memory
+	CUDA_CHECK_RETURN(cudaMemcpy(*dv, host_dv_tmp, hv.size()*sizeof(FeatureVector*), cudaMemcpyHostToDevice));
+	std::cout << "postcopy"<<std::endl;
 
 	print_all<<<1,1>>>(n_input, n_output, *dv);
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());

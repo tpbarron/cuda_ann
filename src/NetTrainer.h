@@ -13,7 +13,7 @@
 
 //defaults
 const bool CPU_USE_BATCH = false;
-const float CPU_LEARNING_RATE = 0.001;
+const float CPU_LEARNING_RATE = 0.7;
 const float CPU_MOMENTUM = 0.9;
 const long CPU_MAX_EPOCHS = 1500;
 const int CPU_DESIRED_ACCURACY = 90;

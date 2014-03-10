@@ -1,70 +1,78 @@
 4 2 1
-Data file: and.dat
+Data file: datasets/and.dat
 Read Complete: 4 patterns loaded
-0 1 , 0 
-0 0 , 0 
-1 0 , 0 
-1 1 , 1 
 initializing weights
 Memory allocated on device.
-Dev 0: 124
 data copied to device
 
 CPU net 0
 input: [0: 0], [1: 1], [2: 1], 
-[w00: -0.0134058], [w01: -0.387859], [w10: -0.373269], [w11: -0.27022], [w20: -0.434604], [w21: -0.274625], 
+[w00: -0.430865], [w01: 0.150663], [w10: -0.00339419], [w11: -0.33061], [w20: -0.126392], [w21: -0.668141], 
 hidden: [0: 0], [1: 0], [2: 1], 
-[w00: -0.288798], [w10: -0.644825], [w20: -0.31313], 
+[w00: 0.157839], [w10: 0.704188], [w20: -0.529378], 
 output: [0: 0], 
 
 CPU net 1
 input: [0: 0], [1: 1], [2: 1], 
-[w00: -0.0134058], [w01: -0.387859], [w10: -0.373269], [w11: -0.27022], [w20: -0.434604], [w21: -0.274625], 
-hidden: [0: 0.308344], [1: 0.367061], [2: 1], 
-[w00: -0.288798], [w10: -0.644825], [w20: -0.31313], 
-output: [0: 0.345502], 
+[w00: -0.430865], [w01: 0.150663], [w10: -0.00339419], [w11: -0.33061], [w20: -0.126392], [w21: -0.668141], 
+hidden: [0: 0.467599], [1: 0.269187], [2: 1], 
+[w00: 0.157839], [w10: 0.704188], [w20: -0.529378], 
+output: [0: 0.433886], 
 
-output error gradients: [g0: -0.0781285], 
-deltas hidden output: [d00: -2.40905e-05], [d10: -2.8678e-05], [d20: -7.81285e-05], 
-hidden error gradients: [g0: 0.00481205], [g1: 0.0117045], 
-deltas input hidden: [d00: 0], [d10: 4.81205e-06], [d20: 4.81205e-06], [d01: 0], [d11: 1.17045e-05], [d21: 1.17045e-05], 
+output error gradients: [g0: -0.106575], 
+deltas hidden output: [d00: -0.034884], [d10: -0.020082], [d20: -0.0746024], 
+hidden error gradients: [g0: -0.00418776], [g1: -0.014764], 
+deltas input hidden: [d00: 0], [d10: -0.00293143], [d20: -0.00293143], [d01: 0], [d11: -0.0103348], [d21: -0.0103348], 
 CPU net 2
 input: [0: 0], [1: 1], [2: 1], 
-[w00: -0.0134058], [w01: -0.387859], [w10: -0.373259], [w11: -0.270197], [w20: -0.434594], [w21: -0.274601], 
-hidden: [0: 0.308344], [1: 0.367061], [2: 1], 
-[w00: -0.288847], [w10: -0.644883], [w20: -0.313286], 
-output: [0: 0.345502], 
+[w00: -0.430865], [w01: 0.150663], [w10: -0.00925705], [w11: -0.35128], [w20: -0.132255], [w21: -0.688811], 
+hidden: [0: 0.467599], [1: 0.269187], [2: 1], 
+[w00: 0.0880711], [w10: 0.664024], [w20: -0.678583], 
+output: [0: 0.433886], 
 
+Testing backprop_v2
 
 GPU net 0
 input 0: 0.000000, input 1: 1.000000, input 2: 1.000000, 
-ih weight (0, 0): -0.013406, ih weight (0, 1): -0.387859, ih weight (1, 0): -0.373269, ih weight (1, 1): -0.270220, ih weight (2, 0): -0.434604, ih weight (2, 1): -0.274625, 
+ih weight (0, 0): -0.430865, ih weight (0, 1): 0.150663, ih weight (1, 0): -0.003394, ih weight (1, 1): -0.330610, ih weight (2, 0): -0.126392, ih weight (2, 1): -0.668141, 
 hidden 0: 0.000000, hidden 1: 0.000000, hidden 2: 1.000000, 
-ho weight (0, 0): -0.288798, ho weight (1, 0): -0.644825, ho weight (2, 0): -0.313130, 
+ho weight (0, 0): 0.157839, ho weight (1, 0): 0.704188, ho weight (2, 0): -0.529378, 
 output 0: 0.000000, 
 
 GPU net 1
 input 0: 0.000000, input 1: 1.000000, input 2: 1.000000, 
-ih weight (0, 0): -0.013406, ih weight (0, 1): -0.387859, ih weight (1, 0): -0.373269, ih weight (1, 1): -0.270220, ih weight (2, 0): -0.434604, ih weight (2, 1): -0.274625, 
-hidden 0: 0.308344, hidden 1: 0.367061, hidden 2: 1.000000, 
-ho weight (0, 0): -0.288798, ho weight (1, 0): -0.644825, ho weight (2, 0): -0.313130, 
-output 0: 0.345502, 
+ih weight (0, 0): -0.430865, ih weight (0, 1): 0.150663, ih weight (1, 0): -0.003394, ih weight (1, 1): -0.330610, ih weight (2, 0): -0.126392, ih weight (2, 1): -0.668141, 
+hidden 0: 0.467599, hidden 1: 0.269187, hidden 2: 1.000000, 
+ho weight (0, 0): 0.157839, ho weight (1, 0): 0.704188, ho weight (2, 0): -0.529378, 
+output 0: 0.433886, 
 
 GPU net 2
-out_err_grad[0] = -0.078129, output = 0.345502, target = 0.000000
-delta_ho(0, 0) = -0.000024, l_rate = 0.001000, hidden[0] = 0.308344, out_err_gradients[0] = -0.078129, momentum = 0.900000
-delta_ho(1, 0) = -0.000029, l_rate = 0.001000, hidden[1] = 0.367061, out_err_gradients[0] = -0.078129, momentum = 0.900000
-delta_ho(2, 0) = -0.000078, l_rate = 0.001000, hidden[2] = 1.000000, out_err_gradients[0] = -0.078129, momentum = 0.900000
-hidden_err_grad[0] = 0.004812
-hidden_err_grad[1] = 0.011704
-delta_ho(0, 0) = 0.000000, l_rate = 0.001000, input[0] = 0.000000, hidden_err_gradients[0] = 0.004812, momentum = 0.900000
-delta_ho(0, 1) = 0.000000, l_rate = 0.001000, input[0] = 0.000000, hidden_err_gradients[1] = 0.011704, momentum = 0.900000
-delta_ho(0, 2) = 0.000005, l_rate = 0.001000, input[0] = 0.000000, hidden_err_gradients[2] = -0.000000, momentum = 0.900000
-delta_ho(1, 0) = 0.000005, l_rate = 0.001000, input[1] = 1.000000, hidden_err_gradients[0] = 0.004812, momentum = 0.900000
-delta_ho(1, 1) = 0.000012, l_rate = 0.001000, input[1] = 1.000000, hidden_err_gradients[1] = 0.011704, momentum = 0.900000
-delta_ho(1, 2) = -0.000000, l_rate = 0.001000, input[1] = 1.000000, hidden_err_gradients[2] = -0.000000, momentum = 0.900000
+out_err_grad[0] = -0.106575, output = 0.433886, target = 0.000000
+delta_ho(0, 0) = -0.034884, l_rate = 0.700000, hidden[0] = 0.467599, out_err_gradients[0] = -0.106575, momentum = 0.900000
+delta_ho(1, 0) = -0.020082, l_rate = 0.700000, hidden[1] = 0.269187, out_err_gradients[0] = -0.106575, momentum = 0.900000
+delta_ho(2, 0) = -0.074602, l_rate = 0.700000, hidden[2] = 1.000000, out_err_gradients[0] = -0.106575, momentum = 0.900000
+hidden_err_grad[0] = -0.004188
+hidden_err_grad[1] = -0.014764
+d_weights(0, 0) = 0.122955, deltas(0, 0) = -0.034884
+d_weights(1, 0) = 0.684106, deltas(1, 0) = -0.020082
+d_weights(2, 0) = -0.603980, deltas(2, 0) = -0.074602
+delta_ih(0, 0) = 0.000000, l_rate = 0.700000, input[0] = 0.000000, hidden_err_gradients[0] = -0.004188, momentum = 0.900000
+delta_ih(1, 1) = -0.010335, l_rate = 0.700000, input[1] = 1.000000, hidden_err_gradients[1] = -0.014764, momentum = 0.900000
+delta_ih(2, 0) = -0.002931, l_rate = 0.700000, input[2] = 1.000000, hidden_err_gradients[0] = -0.004188, momentum = 0.900000
+delta_ih(0, 1) = 0.000000, l_rate = 0.700000, input[0] = 0.000000, hidden_err_gradients[1] = -0.014764, momentum = 0.900000
+delta_ih(1, 0) = -0.002931, l_rate = 0.700000, input[1] = 1.000000, hidden_err_gradients[0] = -0.004188, momentum = 0.900000
+delta_ih(2, 1) = -0.010335, l_rate = 0.700000, input[2] = 1.000000, hidden_err_gradients[1] = -0.014764, momentum = 0.900000
+d_weights(0, 0) = -0.430865, deltas(0, 0) = 0.000000
+d_weights(1, 1) = -0.340945, deltas(1, 1) = -0.010335
+d_weights(2, 0) = -0.129323, deltas(2, 0) = -0.002931
+d_weights(0, 1) = 0.150663, deltas(0, 1) = 0.000000
+d_weights(1, 0) = -0.006326, deltas(1, 0) = -0.002931
+d_weights(2, 1) = -0.678476, deltas(2, 1) = -0.010335
 input 0: 0.000000, input 1: 1.000000, input 2: 1.000000, 
-ih weight (0, 0): -0.013406, ih weight (0, 1): -0.387859, ih weight (1, 0): -0.373264, ih weight (1, 1): -0.270209, ih weight (2, 0): -0.434604, ih weight (2, 1): -0.274625, 
-hidden 0: 0.308344, hidden 1: 0.367061, hidden 2: 1.000000, 
-ho weight (0, 0): -0.288823, ho weight (1, 0): -0.644854, ho weight (2, 0): -0.313208, 
-output 0: 0.345502, 
+ih weight (0, 0): -0.430865, ih weight (0, 1): 0.150663, ih weight (1, 0): -0.006326, ih weight (1, 1): -0.340945, ih weight (2, 0): -0.129323, ih weight (2, 1): -0.678476, 
+hidden 0: 0.467599, hidden 1: 0.269187, hidden 2: 1.000000, 
+ho weight (0, 0): 0.122955, ho weight (1, 0): 0.684106, ho weight (2, 0): -0.603980, 
+output 0: 0.433886, 
+
+Validates: 0
+device reset

@@ -177,7 +177,7 @@ void Net::init_weights() {
 
 
 float Net::get_set_mse(thrust::host_vector<FeatureVector*> set) {
-	double mse = 0;
+	float mse = 0;
 	//for every training input array
 	for ( int tp = 0; tp < (int) set.size(); tp++) {
 		//feed inputs through network and backpropagate errors
@@ -195,7 +195,7 @@ float Net::get_set_mse(thrust::host_vector<FeatureVector*> set) {
 
 
 float Net::get_set_accuracy(thrust::host_vector<FeatureVector*> set) {
-	double incorrectResults = 0;
+	float incorrectResults = 0;
 
 	//for every training input array
 	for (int tp = 0; tp < (int) set.size(); tp++) {

@@ -23,17 +23,17 @@ public:
 	void set_iterations(int i);
 	int get_iterations();
 
-	double profile_feed_forward_v1();
-	double profile_feed_forward_v1_2();
-	double profile_feed_forward_v2();
-	double profile_feed_forward_v2_2();
+	float profile_feed_forward_v1();
+	float profile_feed_forward_v1_2();
+	float profile_feed_forward_v2();
+	float profile_feed_forward_v2_2();
 
-	double profile_backprop_v1();
-	double profile_backprop_v2();
-	double profile_cpu_backprop(float *targets);
-	double profile_cpu_feedforward(float *targets);
-	double profile_mse_acc();
-	double profile_weight_init();
+	float profile_backprop_v1();
+	float profile_backprop_v2();
+	float profile_cpu_backprop(float *targets);
+	float profile_cpu_feedforward(float *targets);
+	float profile_mse_acc();
+	float profile_weight_init();
 
 
 private:

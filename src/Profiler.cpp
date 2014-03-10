@@ -46,7 +46,7 @@ int Profiler::get_iterations() {
 	return iterations;
 }
 
-double Profiler::profile_feed_forward_v1() {
+float Profiler::profile_feed_forward_v1() {
 	std::cout << "Profiling feed forward v1 over " << iterations << " iterations." << std::endl;
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
@@ -80,7 +80,7 @@ double Profiler::profile_feed_forward_v1() {
 }
 
 
-double Profiler::profile_feed_forward_v1_2() {
+float Profiler::profile_feed_forward_v1_2() {
 	std::cout << "Profiling feed forward v1.2 over " << iterations << " iterations." << std::endl;
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
@@ -103,7 +103,7 @@ double Profiler::profile_feed_forward_v1_2() {
 }
 
 
-double Profiler::profile_feed_forward_v2() {
+float Profiler::profile_feed_forward_v2() {
 	std::cout << "Profiling feed forward v2 over " << iterations << " iterations." << std::endl;
 
 	cudaEvent_t start, stop;
@@ -127,7 +127,7 @@ double Profiler::profile_feed_forward_v2() {
 	return milliseconds;
 }
 
-double Profiler::profile_feed_forward_v2_2() {
+float Profiler::profile_feed_forward_v2_2() {
 	std::cout << "Profiling feed forward v2_2 over " << iterations << " iterations." << std::endl;
 
 	cudaEvent_t start, stop;
@@ -152,7 +152,7 @@ double Profiler::profile_feed_forward_v2_2() {
 }
 
 
-double Profiler::profile_backprop_v1() {
+float Profiler::profile_backprop_v1() {
 	std::cout << "Profiling backprop v1 over " << iterations << " iterations." << std::endl;
 
 	cudaEvent_t start, stop;
@@ -175,7 +175,7 @@ double Profiler::profile_backprop_v1() {
 	return milliseconds;
 }
 
-double Profiler::profile_backprop_v2() {
+float Profiler::profile_backprop_v2() {
 	std::cout << "Profiling backprop v2 over " << iterations << " iterations." << std::endl;
 
 	cudaEvent_t start, stop;
@@ -198,7 +198,7 @@ double Profiler::profile_backprop_v2() {
 	return milliseconds;
 }
 
-double Profiler::profile_cpu_backprop(float *targets) {
+float Profiler::profile_cpu_backprop(float *targets) {
 	std::cout << "Profiling cpu backprop over " << iterations << " iterations." << std::endl;
 
 	start = clock();
@@ -209,12 +209,12 @@ double Profiler::profile_cpu_backprop(float *targets) {
 	}
 
 	stop = clock();
-	long milliseconds = ((double)stop - start) / CLOCKS_PER_SEC * 1000.0;
+	long milliseconds = ((float)stop - start) / CLOCKS_PER_SEC * 1000.0;
 	std::cout << milliseconds << " ms" << std::endl;
 	return milliseconds;
 }
 
-double Profiler::profile_cpu_feedforward(float *input) {
+float Profiler::profile_cpu_feedforward(float *input) {
 	std::cout << "Profiling cpu feedforward over " << iterations << " iterations." << std::endl;
 
 	start = clock();
@@ -224,15 +224,15 @@ double Profiler::profile_cpu_feedforward(float *input) {
 	}
 
 	stop = clock();
-	long milliseconds = ((double)stop - start) / CLOCKS_PER_SEC * 1000.0;
+	long milliseconds = ((float)stop - start) / CLOCKS_PER_SEC * 1000.0;
 	std::cout << milliseconds << " ms" << std::endl;
 	return milliseconds;
 }
 
-double Profiler::profile_mse_acc() {
+float Profiler::profile_mse_acc() {
 	return 0;
 }
 
-double Profiler::profile_weight_init() {
+float Profiler::profile_weight_init() {
 	return 0;
 }
