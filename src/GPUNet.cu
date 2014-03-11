@@ -17,6 +17,14 @@
  * ------------ CUDA ------------
  */
 
+
+/**
+ * Get a random number within a given float range
+ * \param min float
+ * \param max float
+ * \param i int
+ * \param *global curandState
+ */
 __device__ float get_random_range(float min, float max, int i, curandState *global) {
 	curandState local = global[i];
 	float r = curand_uniform(&local);
@@ -32,14 +40,29 @@ __device__ float get_ho_weight(float* ho_weights, int n_output, int h, int o) {
 	return ho_weights[n_output*h + o];
 }
 
+/**
+ * Compute the sigmoid value of a given float
+ * \param x the value to compute the sigmoid of
+ */
 __device__ inline float sigmoid(float x) {
 	return 1.0 / (1.0 + exp(-x));
 }
 
+
+/**
+ * Compute the output gradient given specific output and target values
+ * \param output float
+ * \param target float
+ */
 __device__ float calc_output_gradient(float output, float target) {
 	return output * (1 - output) * (target - output);
 }
 
+
+/**
+ * Clamp the output to 0 or 1 if within .1
+ *\param f the value to clamp
+ */
 __device__ int clamp(float f) {
 	if (f < .1) {
 		return 0;
@@ -54,13 +77,12 @@ __device__ int clamp(float f) {
  *
  * ------------- Initialization kernels ---------------
  *
- * curand_setup
- * node init
- * weight init
- * delta init
- *
  */
 
+
+/**
+ * Initialize random seeds in CUDA
+ */
 __global__ void curand_setup(curandState *state) {
 	unsigned int seed = (unsigned int)clock64();
 	int id = threadIdx.x;
@@ -68,7 +90,7 @@ __global__ void curand_setup(curandState *state) {
 }
 
 
-/*
+/**
  * initialize nodes to 0 or 1 if bias
  * block(1), threads(n_nodes+1)
  */
@@ -80,8 +102,10 @@ __global__ void init_nodes_layer(float *nodes) {
 		nodes[i] = 0;
 }
 
-//block(1), threads(n_output)
-//set all output nodes to 0
+/**
+ * block(1), threads(n_output)
+ * set all output nodes to 0
+ */
 __global__ void init_nodes_output(float *output) {
 	int i = threadIdx.x;
 	output[i] = 0;
@@ -936,14 +960,14 @@ void GPUNet::train_net(TrainingDataSet *tset) {
 
 		//get generalization set accuracy and MSE
 		//get_set_accuracy_mse(tset->generalization_set, &generalizationSetAccuracy, &generalizationSetMSE);
-		get_set_accuracy_mse_dev(d_generalization_set, tset->generalization_set.size(), &generalizationSetAccuracy, &generalizationSetMSE);
+		//get_set_accuracy_mse_dev(d_generalization_set, tset->generalization_set.size(), &generalizationSetAccuracy, &generalizationSetMSE);
 
 		//print out change in training /generalization accuracy (only if a change is greater than a percent)
-		if (ceil(previousTAccuracy) != ceil(trainingSetAccuracy) || ceil(previousGAccuracy) != ceil(generalizationSetAccuracy)) {
+		//if (ceil(previousTAccuracy) != ceil(trainingSetAccuracy) || ceil(previousGAccuracy) != ceil(generalizationSetAccuracy)) {
 			std::cout << "Epoch: " << epoch;
 			std::cout << "; Test Set Acc:" << trainingSetAccuracy << "%, MSE: " << trainingSetMSE;
 			std::cout << ";\tGSet Acc:" << generalizationSetAccuracy << "%, MSE: " << generalizationSetMSE << std::endl;
-		}
+		//}
 
 
 		previousTAccuracy = trainingSetAccuracy;
@@ -955,7 +979,7 @@ void GPUNet::train_net(TrainingDataSet *tset) {
 
 	//get validation set accuracy and MSE
 	//get_set_accuracy_mse(tset->validation_set, &validationSetAccuracy, &validationSetMSE);
-	get_set_accuracy_mse_dev(d_validation_set, tset->validation_set.size(), &validationSetAccuracy, &validationSetMSE);
+	//get_set_accuracy_mse_dev(d_validation_set, tset->validation_set.size(), &validationSetAccuracy, &validationSetMSE);
 
 	//out validation accuracy and MSE
 	std::cout << std::endl << "Training Complete. Elapsed Epochs: " << epoch << std::endl;
@@ -1086,7 +1110,7 @@ void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_featu
 		feed_forward_v1_2(feature_vecs[i]->input);
 
 		//TODO: maintain these variables on the GPU side
-		CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_correct_result, &correct_result, sizeof(correct_result), 0, cudaMemcpyHostToDevice));
+		/*CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_correct_result, &correct_result, sizeof(correct_result), 0, cudaMemcpyHostToDevice));
 		CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_mse_sum, &mse_tmp, sizeof(mse_tmp), 0, cudaMemcpyHostToDevice));
 		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 		output_correct<<<1, n_output>>>(d_output, feature_vecs[i]->target);
@@ -1095,7 +1119,7 @@ void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_featu
 		CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse_tmp, d_mse_sum, sizeof(mse_tmp), 0, cudaMemcpyDeviceToHost));
 		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 		if (!correct_result) ++incorrect_patterns;
-		mse += mse_tmp;
+		mse += mse_tmp;*/
 
 		//std::cout << "Correct result: " << correct_result << ", mse_tmp: " << mse_tmp << std::endl;
 
@@ -1104,8 +1128,8 @@ void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_featu
 	}
 
 	//update training accuracy and MSE
-	trainingSetAccuracy = 100 - ((float)incorrect_patterns/n_features * 100);
-	trainingSetMSE = mse / (n_output * n_features);
+	//trainingSetAccuracy = 100 - ((float)incorrect_patterns/n_features * 100);
+	//trainingSetMSE = mse / (n_output * n_features);
 }
 
 /*

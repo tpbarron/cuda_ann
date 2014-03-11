@@ -14,6 +14,9 @@
 #define CUDA_CALLABLE_MEMBER
 #endif
 
+/**
+ * A @FeatureVector holds float pointers to inputs and targets
+ */
 class FeatureVector {
 
 public:

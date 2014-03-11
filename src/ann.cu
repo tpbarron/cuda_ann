@@ -22,6 +22,9 @@
 }
 
 
+/**
+ * Profile network
+ */
 void profile(GPUNet &gnet, Net &net, NetData &d) {
 	NetTrainer nt(&net);
 	Profiler p(&gnet, &net, &nt);
@@ -37,6 +40,9 @@ void profile(GPUNet &gnet, Net &net, NetData &d) {
 	p.profile_cpu_backprop(d.get_training_dataset()->training_set[0]->target);
 }
 
+/**
+ * Test network
+ */
 void test(GPUNet &gnet, Net &net, NetData &d) {
 	gnet.init_from_net(net, d);
 	//gnet.test_feed_forward(net, d);
@@ -51,7 +57,7 @@ int main(void) {
 	time_t start, stop;
 
 	NetData d;
-	if (!d.load_file("datasets/norm.dat"))
+	if (!d.load_file("datasets/and.dat"))
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
 
@@ -69,7 +75,7 @@ int main(void) {
 
 
 	gnet.set_training_params(0.9, 0.9);
-	gnet.set_stopping_conds(10000, 95.0);
+	gnet.set_stopping_conds(50, 95.0);
 
 	start = clock();
 	gnet.train_net(d.get_training_dataset());
