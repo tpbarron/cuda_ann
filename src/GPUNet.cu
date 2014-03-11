@@ -947,10 +947,10 @@ void GPUNet::train_net(TrainingDataSet *tset) {
 	epoch = 0;
 	//train network using training dataset for training and generalization dataset for testing
 	//while ((trainingSetAccuracy < desired_acc) && epoch < max_epochs) {
-	while ((trainingSetAccuracy < desired_acc || generalizationSetAccuracy < desired_acc) && epoch < max_epochs) {
+	while (epoch < max_epochs) {
 		//store previous accuracy
-		float previousTAccuracy = trainingSetAccuracy;
-		float previousGAccuracy = generalizationSetAccuracy;
+		//float previousTAccuracy = trainingSetAccuracy;
+		//float previousGAccuracy = generalizationSetAccuracy;
 
 		//use training set to train network
 		//run_training_epoch(tset->training_set);
@@ -964,14 +964,14 @@ void GPUNet::train_net(TrainingDataSet *tset) {
 
 		//print out change in training /generalization accuracy (only if a change is greater than a percent)
 		//if (ceil(previousTAccuracy) != ceil(trainingSetAccuracy) || ceil(previousGAccuracy) != ceil(generalizationSetAccuracy)) {
-			std::cout << "Epoch: " << epoch;
-			std::cout << "; Test Set Acc:" << trainingSetAccuracy << "%, MSE: " << trainingSetMSE;
-			std::cout << ";\tGSet Acc:" << generalizationSetAccuracy << "%, MSE: " << generalizationSetMSE << std::endl;
+			std::cout << "Epoch: " << epoch << std::endl;
+			//std::cout << "; Test Set Acc:" << trainingSetAccuracy << "%, MSE: " << trainingSetMSE;
+			//std::cout << ";\tGSet Acc:" << generalizationSetAccuracy << "%, MSE: " << generalizationSetMSE << std::endl;
 		//}
 
 
-		previousTAccuracy = trainingSetAccuracy;
-		previousGAccuracy = generalizationSetAccuracy;
+		//previousTAccuracy = trainingSetAccuracy;
+		//previousGAccuracy = generalizationSetAccuracy;
 
 		//once training set is complete increment epoch
 		++epoch;
@@ -983,8 +983,8 @@ void GPUNet::train_net(TrainingDataSet *tset) {
 
 	//out validation accuracy and MSE
 	std::cout << std::endl << "Training Complete. Elapsed Epochs: " << epoch << std::endl;
-	std::cout << "\tValidation Set Accuracy: " << validationSetAccuracy << std::endl;
-	std::cout << "\tValidation Set MSE: " << validationSetMSE << std::endl << std::endl;
+	//std::cout << "\tValidation Set Accuracy: " << validationSetAccuracy << std::endl;
+	//std::cout << "\tValidation Set MSE: " << validationSetMSE << std::endl << std::endl;
 
 	//free training set
 	for (int i = 0; i < tset->training_set.size(); ++i) {
@@ -1100,13 +1100,13 @@ void GPUNet::get_set_accuracy_mse_dev(FeatureVector **feature_vecs, size_t n_fea
 }
 
 void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features) {
-	int incorrect_patterns = 0;
-	float mse = 0, mse_tmp = 0;
-	bool correct_result;
+	//int incorrect_patterns = 0;
+	//float mse = 0, mse_tmp = 0;
+	//bool correct_result;
 
 	for (size_t i = 0; i < n_features; ++i) {
-		mse_tmp = 0;
-		correct_result = true;
+		//mse_tmp = 0;
+		//correct_result = true;
 		feed_forward_v1_2(feature_vecs[i]->input);
 
 		//TODO: maintain these variables on the GPU side

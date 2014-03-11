@@ -214,7 +214,7 @@ void NetTrainer::backprop(float* targets) {
 	}
 
 	/* --- prints ------ */
-	std::cout << "output error gradients: ";
+	/*std::cout << "output error gradients: ";
 	for (int k = 0; k < net->n_output; ++k) {
 		std::cout << "[g" << k << ": " << outputErrorGradients[k] << "], ";
 	}
@@ -226,7 +226,7 @@ void NetTrainer::backprop(float* targets) {
 			std::cout << "[d" << j << k << ": " << deltaHiddenOutput[j][k] << "], ";
 		}
 	}
-	std::cout << std::endl;
+	std::cout << std::endl;*/
 
 
 	//modify deltas between input and hidden layers
@@ -241,7 +241,7 @@ void NetTrainer::backprop(float* targets) {
 	}
 
 	/* --- prints ------ */
-	std::cout << "hidden error gradients: ";
+	/*std::cout << "hidden error gradients: ";
 	for (int k = 0; k < net->n_hidden; ++k) {
 		std::cout << "[g" << k << ": " << hiddenErrorGradients[k] << "], ";
 	}
@@ -253,7 +253,7 @@ void NetTrainer::backprop(float* targets) {
 			std::cout << "[d" << j << k << ": " << deltaInputHidden[j][k] << "], ";
 		}
 	}
-	std::cout << std::endl;
+	std::cout << std::endl;*/
 
 
 	//stochastic learning update the weights immediately

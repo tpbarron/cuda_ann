@@ -75,25 +75,23 @@ int main(void) {
 
 
 	gnet.set_training_params(0.9, 0.9);
-	gnet.set_stopping_conds(50, 95.0);
-
+	gnet.set_stopping_conds(4, 95.0);
 	start = clock();
 	gnet.train_net(d.get_training_dataset());
 	stop = clock();
-
 	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 
 //	gnet.print_net();
 //	gnet.write_net("and.net");
 
 
-//	NetTrainer nt(&net);
-//	nt.set_stopping_conds(10000, 95);
-//	nt.set_training_params(.9, .9);
-//	start = clock();
-//	nt.train_net(d.get_training_dataset());
-//	stop = clock();
-//	std::cout << "CPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
+	NetTrainer nt(&net);
+	nt.set_stopping_conds(10000, 95);
+	nt.set_training_params(.9, .9);
+	start = clock();
+	nt.train_net(d.get_training_dataset());
+	stop = clock();
+	std::cout << "CPU time: " << ((double)stop - start) / CLOCKS_PER_SEC << std::endl;
 
 	CUDA_CHECK_RETURN(cudaDeviceReset());
 	std::cout << "device reset\n";
