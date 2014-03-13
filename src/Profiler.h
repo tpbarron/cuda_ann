@@ -12,6 +12,7 @@
 #include "GPUNet.h"
 #include "Net.h"
 #include "NetTrainer.h"
+#include "NetData.h"
 
 const int DEFAULT_ITERATIONS = 1000;
 
@@ -24,7 +25,7 @@ public:
 	int get_iterations();
 
 	float profile_feed_forward_v1();
-	float profile_feed_forward_v1_2();
+	float profile_feed_forward_v1_2(NetData &d);
 	float profile_feed_forward_v2();
 	float profile_feed_forward_v2_2();
 

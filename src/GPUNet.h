@@ -143,8 +143,10 @@ private:
 	void copy_to_device_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
 	void copy_to_device_host_array(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
 	void copy_to_device_host_array_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
-	void copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
 
+public:
+	void copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
+private:
 	void get_set_accuracy_mse(thrust::host_vector<FeatureVector*> set, float* s_acc, float* s_mse);
 	void get_set_accuracy_mse_dev(FeatureVector **feature_vecs, size_t n_features, float* s_acc, float* s_mse);
 	void run_training_epoch(thrust::host_vector<FeatureVector*> feature_vecs);

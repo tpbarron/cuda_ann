@@ -51,7 +51,6 @@ float Profiler::profile_feed_forward_v1() {
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
-
 	cudaEventRecord(start);
 
 	for (int i = 0; i < iterations; ++i) {
@@ -80,16 +79,21 @@ float Profiler::profile_feed_forward_v1() {
 }
 
 
-float Profiler::profile_feed_forward_v1_2() {
+float Profiler::profile_feed_forward_v1_2(NetData &d) {
 	std::cout << "Profiling feed forward v1.2 over " << iterations << " iterations." << std::endl;
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 
+	FeatureVector **dv;
+	gnet->copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
+
+
 	cudaEventRecord(start);
 
+
 	for (int i = 0; i < iterations; ++i) {
-		//gnet->feed_forward_v1_2();
+		gnet->feed_forward_v1_2(dv[0]->input);
 		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	}
 
