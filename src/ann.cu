@@ -71,16 +71,17 @@ int main(void) {
 	//std::cout << "Dev 0: " << gnet.current_mem_usage(0) << std::endl;
 
 //	test(gnet, net, d);
-	profile(gnet, net, d);
+//	profile(gnet, net, d);
 //	gnet.run_parallel(net, d);
 
 
-//	gnet.set_training_params(0.9, 0.9);
-//	gnet.set_stopping_conds(4, 95.0);
-//	start = clock();
-//	gnet.train_net(d.get_training_dataset());
-//	stop = clock();
-//	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
+	gnet.set_training_params(0.9, 0.9);
+	gnet.set_stopping_conds(4, 95.0);
+	start = clock();
+
+	gnet.train_net_sectioned(d.get_training_dataset());
+	stop = clock();
+	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 
 //	gnet.print_net();
 //	gnet.write_net("and.net");

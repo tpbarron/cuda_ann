@@ -70,7 +70,9 @@ public:
 	void set_max_epochs(int max_epochs);
 	void set_desired_accuracy(float acc);
 	void set_stopping_conds(int me, float acc);
+	void calc_dataset_parameters(TrainingDataSet *tset);
 	void train_net(TrainingDataSet *tset);
+	void train_net_sectioned(TrainingDataSet *tset);
 
 	void feed_forward_v1(); //inputs already copied
 	void feed_forward_v1_2(float *d_inp);
@@ -100,6 +102,8 @@ private:
 	 */
 	int n_gpus;
 	size_t *gpu_mem;
+	int n_copyable_patterns;
+	int n_sections;
 
 	/*
 	 * GPU memory
@@ -146,11 +150,14 @@ private:
 
 public:
 	void copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
+	void copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv,
+			int p_start, int p_end, bool allocate);
 private:
 	void get_set_accuracy_mse(thrust::host_vector<FeatureVector*> set, float* s_acc, float* s_mse);
 	void get_set_accuracy_mse_dev(FeatureVector **feature_vecs, size_t n_features, float* s_acc, float* s_mse);
 	void run_training_epoch(thrust::host_vector<FeatureVector*> feature_vecs);
 	void run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features);
+	void run_training_epoch_dev_sectioned(FeatureVector **feature_vecs, int n_features);
 
 	float* reduce(int n, int len, float* d_sums, float *d_y);
 	float* execute_split_reduction(int n, int offset, float *d_x, float *d_y);

@@ -89,7 +89,7 @@ bool NetData::load_file(std::string fname) {
 		for (int i = training_data_end_index + gSize; i < (int)data.size(); i++)
 			tset.validation_set.push_back(data[i]);*/
 
-		tset.n = data.size();
+		tset.set_size(data.size());
 
 		//print success
 		std::cout << "Data file: " << fname <<

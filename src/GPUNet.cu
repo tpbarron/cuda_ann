@@ -984,6 +984,23 @@ int GPUNet::num_patterns_copyable(TrainingDataSet *tset) {
 	return available_mem / bytes_per_pattern;
 }
 
+void GPUNet::calc_dataset_parameters(TrainingDataSet *tset) {
+	// calc num patterns copyable
+	// num patterns = integer div of available memory / mem for single pattern
+	int bytes_per_pattern = sizeof(float)*((n_input+1)+(n_output));
+	int cur_dev = get_current_device();
+	int available_mem = total_dev_mem(cur_dev) - current_mem_usage(cur_dev);
+	n_copyable_patterns = available_mem / bytes_per_pattern;
+	if (n_copyable_patterns > tset->size()) {
+		n_copyable_patterns = tset->size();
+	}
+	// calc num sections
+	// num_sections = ceil ( n_patterns / n_copyable_patterns)
+	n_sections = (tset->size() + n_copyable_patterns - 1) / n_copyable_patterns;
+
+	std::cout << "n_copyable_patterns="<<n_copyable_patterns<<", n_sections="<<n_sections<<std::endl;
+}
+
 void GPUNet::train_net(TrainingDataSet *tset) {
 	std::cout << std::endl << "Neural Network Training Starting: " << std::endl
 			<< "----------------------------------------------------" << std::endl
@@ -1050,6 +1067,58 @@ void GPUNet::train_net(TrainingDataSet *tset) {
 	std::cout << std::endl << "Training Complete. Elapsed Epochs: " << epoch << std::endl;
 	//std::cout << "\tValidation Set Accuracy: " << validationSetAccuracy << std::endl;
 	//std::cout << "\tValidation Set MSE: " << validationSetMSE << std::endl << std::endl;
+
+	//free training set
+	for (int i = 0; i < tset->training_set.size(); ++i) {
+		CUDA_CHECK_RETURN(cudaFree(d_training_set[i]->input));
+		CUDA_CHECK_RETURN(cudaFree(d_training_set[i]->target));
+		free(d_training_set[i]);
+	}
+	free(d_training_set);
+}
+
+
+
+void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
+	std::cout << std::endl << "Neural Network Training Starting: " << std::endl
+			<< "----------------------------------------------------" << std::endl
+			<< "LR: " << l_rate << ", Momentum: " << momentum << ", Max Epochs: " << max_epochs << std::endl
+			<< n_input << " Input Neurons, " << n_hidden << " Hidden Neurons, " << n_output << " Output Neurons" << std::endl
+			<< "----------------------------------------------------" << std::endl << std::endl;
+
+	calc_dataset_parameters(tset);
+	epoch = 0;
+	FeatureVector** d_training_set;
+
+	if (n_sections == 1) { // no section copying necessary
+		copy_to_device_host_array_ptrs_biased(tset->training_set, &d_training_set);
+		std::cout << "datacopied" << std::endl;
+		while (epoch < max_epochs) {
+			run_training_epoch_dev(d_training_set, tset->training_set.size());
+			++epoch;
+		}
+	} else {
+		while (epoch < max_epochs) {
+			//copy a section and run partial epoch
+			for (int i = 0; i < n_sections; ++i) {
+				//copy patterns from [n_sections*n_patterns_copyable, (n_sections+1)*n_patterns_copyable)
+				int p_start = i * n_copyable_patterns;
+				int p_end = p_start + n_copyable_patterns;
+				std::cout << "copying section="<<i<<", pstart="<< p_start << ", pend="<<p_end << std::endl;
+				if (p_end > tset->training_set.size()) p_end = tset->training_set.size();
+				copy_to_device_host_array_ptrs_biased_section(tset->training_set, &d_training_set, p_start, p_end, i == 0 && epoch == 0);
+				std::cout << "datacopied" << std::endl;
+				run_training_epoch_dev_sectioned(d_training_set, p_end-p_start);
+			}
+
+			std::cout << "Epoch: " << epoch << std::endl;
+			//once training set is complete increment epoch
+			++epoch;
+		}
+	}
+
+	//out validation accuracy and MSE
+	std::cout << std::endl << "Training Complete. Elapsed Epochs: " << epoch << std::endl;
 
 	//free training set
 	for (int i = 0; i < tset->training_set.size(); ++i) {
@@ -1172,6 +1241,7 @@ void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_featu
 	for (size_t i = 0; i < n_features; ++i) {
 		//mse_tmp = 0;
 		//correct_result = true;
+		std::cout << "feature="<< i << std::endl;
 		feed_forward_v1_2(feature_vecs[i]->input);
 
 		//TODO: maintain these variables on the GPU side
@@ -1195,6 +1265,15 @@ void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_featu
 	//update training accuracy and MSE
 	//trainingSetAccuracy = 100 - ((float)incorrect_patterns/n_features * 100);
 	//trainingSetMSE = mse / (n_output * n_features);
+}
+
+void GPUNet::run_training_epoch_dev_sectioned(FeatureVector **feature_vecs, int n_features) {
+	for (size_t i = 0; i < n_features; ++i) {
+		std::cout << "feature="<< i << std::endl;
+		feed_forward_v1_2(feature_vecs[i]->input);
+		backprop_v2(feature_vecs[i]->input, feature_vecs[i]->target);
+		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+	}
 }
 
 /*
@@ -1971,4 +2050,43 @@ void GPUNet::copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVe
 		(*dv)[i] = d_fv;
 	}
 
+}
+
+/**
+ * Copy from pattern p_start to p_end to device
+ * only allocate memory if \p allocate is true
+ */
+void GPUNet::copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv,
+		int p_start, int p_end, bool allocate) {
+
+	if (allocate) { // if the first epoch and the first section
+		*dv = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
+	}
+
+	for (int i = p_start; i < p_end; ++i) {
+
+		if (allocate) {
+			//allocate device memory
+			FeatureVector *d_fv = (FeatureVector*)malloc(sizeof(FeatureVector*));
+
+			float *d_inp, *d_tar;
+			CUDA_CHECK_RETURN(cudaMalloc((void **)&d_inp, (n_input+1)*sizeof(float)));
+			CUDA_CHECK_RETURN(cudaMalloc((void **)&d_tar, (n_output)*sizeof(float)));
+
+			CUDA_CHECK_RETURN(cudaMemcpy(d_inp, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
+			CUDA_CHECK_RETURN(cudaMemcpy(d_tar, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
+
+			d_fv->input = d_inp;
+			d_fv->target = d_tar;
+
+			//TODO: does setting all in parallel improve speed?
+			set_bias<<<1, 1>>>(n_input, d_inp);
+			CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+			(*dv)[i] = d_fv;
+		} else {
+			CUDA_CHECK_RETURN(cudaMemcpy((*dv)[i]->input, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
+			CUDA_CHECK_RETURN(cudaMemcpy((*dv)[i]->target, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
+		}
+
+	}
 }
