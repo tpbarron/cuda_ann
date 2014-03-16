@@ -89,6 +89,12 @@ __global__ void curand_setup(curandState *state) {
 	curand_init(seed, id, 0, &state[id]);
 }
 
+__global__ void curand_setup_v2(curandState *state) {
+	unsigned int seed = (unsigned int)clock64();
+	unsigned int id = blockIdx.x * blockDim.x+threadIdx.x;
+	curand_init(seed, id, 0, &state[id]);
+}
+
 
 /**
  * initialize nodes to 0 or 1 if bias
@@ -102,6 +108,16 @@ __global__ void init_nodes_layer(float *nodes) {
 		nodes[i] = 0;
 }
 
+__global__ void init_nodes_layer_v2(int n, float *nodes) {
+	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
+	if (i < n) {
+		if (i == n-1)
+			nodes[i] = 1;
+		else
+			nodes[i] = 0;
+	}
+}
+
 /**
  * block(1), threads(n_output)
  * set all output nodes to 0
@@ -109,6 +125,13 @@ __global__ void init_nodes_layer(float *nodes) {
 __global__ void init_nodes_output(float *output) {
 	int i = threadIdx.x;
 	output[i] = 0;
+}
+
+__global__ void init_nodes_output_v2(int n, float *output) {
+	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
+	if (i < n) {
+		output[i] = 0;
+	}
 }
 
 //block(1), threads(n_layer1+1, n_layer2)
@@ -121,6 +144,20 @@ __global__ void init_weights(float *weights, curandState *state) {
 	weights[blockDim.y*node_l1 + node_l2] = get_random_range(-r, r, blockDim.y*node_l1 + node_l2, state);
 }
 
+
+__global__ void init_weights_v2(int n1, int n2, float *weights, curandState *state) {
+	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
+	// r is the range for random values
+	float r = 1.0 / sqrt((float)blockDim.x-1);
+	if (i < (n1+1)*n2) {
+		int node_l1 = i % (n1+1);
+		int node_l2 = i % n2;
+		weights[n2*node_l1 + node_l2] = get_random_range(-r, r, n2*node_l1 + node_l2, state);
+	}
+}
+
+
+
 // block(1), threads(n_layer1+1, n_layer2)
 __global__ void init_deltas(float *deltas) {
 	int node_l1 = threadIdx.x;
@@ -128,6 +165,18 @@ __global__ void init_deltas(float *deltas) {
 
 	deltas[blockDim.y*node_l1 + node_l2] = 0;
 }
+
+__global__ void init_deltas_v2(int n1, int n2, float *deltas) {
+	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (i < (n1+1)*n2) {
+		int node_l1 = i % (n1+1);
+		int node_l2 = i % n2;
+
+		deltas[n2*node_l1 + node_l2] = 0;
+	}
+}
+
 
 
 
@@ -454,6 +503,8 @@ __global__ void hidden_error_gradients_v3(int no, float *sums, float *d_ho_weigh
 
 	sums[j*no + k] = d_ho_weights[j*no + k] * output_err_gradients[k];
 }
+
+
 /*
  * called with threads(nh)
  *
@@ -941,7 +992,7 @@ void GPUNet::train_net(TrainingDataSet *tset) {
 		//TODO: what do I do?
 		// Copy as many as possible
 		//
-		// Should this be done in a separable thread
+		// Should this be done in a separate thread
 	}
 
 	epoch = 0;
