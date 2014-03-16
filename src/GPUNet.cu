@@ -89,12 +89,13 @@ __global__ void curand_setup(curandState *state) {
 	curand_init(seed, id, 0, &state[id]);
 }
 
-__global__ void curand_setup_v2(curandState *state) {
-	unsigned int seed = (unsigned int)clock64();
-	unsigned int id = blockIdx.x * blockDim.x+threadIdx.x;
-	curand_init(seed, id, 0, &state[id]);
+__global__ void curand_setup_v2(int n, curandState *state) {
+	unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
+	if (id < n) {
+		unsigned int seed = (unsigned int)clock64();
+		curand_init(seed, id, 0, &state[id]);
+	}
 }
-
 
 /**
  * initialize nodes to 0 or 1 if bias
@@ -148,8 +149,8 @@ __global__ void init_weights(float *weights, curandState *state) {
 __global__ void init_weights_v2(int n1, int n2, float *weights, curandState *state) {
 	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
 	// r is the range for random values
-	float r = 1.0 / sqrt((float)blockDim.x-1);
 	if (i < (n1+1)*n2) {
+		float r = 1.0 / sqrt((float)blockDim.x-1);
 		int node_l1 = i % (n1+1);
 		int node_l2 = i % n2;
 		weights[n2*node_l1 + node_l2] = get_random_range(-r, r, n2*node_l1 + node_l2, state);
@@ -834,28 +835,41 @@ void GPUNet::init_from_net(Net &net, NetData &d) {
 
 
 void GPUNet::init_net() {
+	int threads = 128;
+
 	//init nodes to all 0
-	init_nodes_layer<<<1, n_input+1>>>(d_input);
-	init_nodes_layer<<<1, n_hidden+1>>>(d_hidden);
-	init_nodes_output<<<1, n_output>>>(d_output);
+	init_nodes_layer_v2<<<(n_input+1+threads-1)/threads, threads>>>(n_input+1, d_input);
+	init_nodes_layer_v2<<<(n_hidden+1+threads-1)/threads, threads>>>(n_hidden+1, d_hidden);
+	init_nodes_output_v2<<<(n_output+threads-1)/threads, threads>>>(n_output, d_output);
 
 	//init weights to random vals
 	curandState *state;
+	std::cout << "size of curandState: " << sizeof(curandState) << std::endl;
 	CUDA_CHECK_RETURN(cudaMalloc(&state, (n_input+1)*n_hidden*sizeof(curandState)));
 	curand_setup<<<1, (n_input+1)*n_hidden>>>(state);
+	//curand_setup_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>((n_input+1)*n_hidden, state);
+
+	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+
 	dim3 ih_threads(n_input+1, n_hidden);
 	init_weights<<<1, ih_threads>>>(d_ih_weights, state);
+	//init_weights_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(n_input+1, n_hidden, d_ih_weights, state);
 	CUDA_CHECK_RETURN(cudaFree(state));
 
 	CUDA_CHECK_RETURN(cudaMalloc(&state, (n_hidden+1)*n_output*sizeof(curandState)));
 	curand_setup<<<1, (n_hidden+1)*n_output>>>(state);
+	//curand_setup_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>((n_hidden+1)*n_output, state);
+
 	dim3 ho_threads(n_hidden+1, n_output);
 	init_weights<<<1, ho_threads>>>(d_ho_weights, state);
+	//init_weights_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>(n_hidden+1, n_output, d_ho_weights, state);
 	CUDA_CHECK_RETURN(cudaFree(state));
 
 	//init deltas to 0
 	init_deltas<<<1, ih_threads>>>(d_ih_deltas);
+	//init_deltas_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(n_input+1, n_hidden, d_ih_deltas);
 	init_deltas<<<1, ho_threads>>>(d_ho_deltas);
+	//init_deltas_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>(n_hidden+1, n_output, d_ho_deltas);
 
 	std::cout << "net initialized" << std::endl;
 }
