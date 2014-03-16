@@ -24,13 +24,16 @@ public:
 	void set_iterations(int i);
 	int get_iterations();
 
+	void cuda_start();
+	void cuda_stop();
+
 	float profile_feed_forward_v1();
 	float profile_feed_forward_v1_2(NetData &d);
 	float profile_feed_forward_v2();
 	float profile_feed_forward_v2_2();
 
 	float profile_backprop_v1();
-	float profile_backprop_v2();
+	float profile_backprop_v2(NetData &d);
 	float profile_cpu_backprop(float *targets);
 	float profile_cpu_feedforward(float *targets);
 	float profile_mse_acc();
@@ -44,6 +47,7 @@ private:
 	NetTrainer *nt;
 	int iterations;
 	clock_t start, stop;
+	cudaEvent_t cu_start, cu_stop;
 
 };
 

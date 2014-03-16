@@ -36,7 +36,7 @@ void profile(GPUNet &gnet, Net &net, NetData &d) {
 	p.profile_cpu_feedforward(d.get_training_dataset()->training_set[0]->input);
 
 	//p.profile_backprop_v1();
-	p.profile_backprop_v2();
+	p.profile_backprop_v2(d);
 	p.profile_cpu_backprop(d.get_training_dataset()->training_set[0]->target);
 }
 
@@ -57,7 +57,7 @@ int main(void) {
 	time_t start, stop;
 
 	NetData d;
-	if (!d.load_file("datasets/norm.dat"))
+	if (!d.load_file("datasets/100_10000_10.dat.norm"))
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
 
