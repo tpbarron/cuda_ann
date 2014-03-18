@@ -59,6 +59,7 @@ public:
 	void init_net();
 	void print_net();
 	void write_net(std::string fname);
+	bool read_net(std::string fname);
 
 	int get_num_input();
 	int get_num_hidden();
@@ -157,7 +158,6 @@ private:
 	void get_set_accuracy_mse_dev(FeatureVector **feature_vecs, size_t n_features, float* s_acc, float* s_mse);
 	void run_training_epoch(thrust::host_vector<FeatureVector*> feature_vecs);
 	void run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features);
-	void run_training_epoch_dev_sectioned(FeatureVector **feature_vecs, int n_features);
 
 	float* reduce(int n, int len, float* d_sums, float *d_y);
 	float* execute_split_reduction(int n, int offset, float *d_x, float *d_y);

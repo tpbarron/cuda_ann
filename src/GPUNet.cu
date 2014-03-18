@@ -202,6 +202,9 @@ __global__ void set_bias(int n_input, float *d_inp) {
  */
 
 __device__ bool d_correct_result = true;
+
+__device__ int d_num_correct = 0;
+__device__ float d_acc = 0;
 // called with blocks = (1), threads = (n_output)
 // d_correct_result must be set to true before each call
 // d_correct_result is copied back to host afterwards
@@ -212,7 +215,23 @@ __global__ void output_correct(float *output, float *target) {
 	}
 }
 
+__global__ void output_correct_v2(float *output, float *target, int n_output) {
+	for (int i = 0; i < n_output; ++i) {
+		if (clamp(output[i]) != clamp(target[i])) {
+			return;
+		}
+	}
+	++d_num_correct;
+}
+
+__global__ void calc_acc(int n_patterns) {
+	d_acc = ((float)d_num_correct/n_patterns * 100);
+	d_num_correct = 0;
+}
+
 __device__ float d_mse_sum = 0;
+__device__ float d_mse = 0; //current mse
+
 // called with blocks = (1), threads = (n_output)
 // d_mse_sum must be set to 0 before each call
 // d_mse_sum is copied back to host afterwards
@@ -221,16 +240,24 @@ __global__ void mse_sum(float *output, float *target) {
 	d_mse_sum += pow((output[i] - target[i]), 2);
 }
 
-/*
- * use reduction instead of writing repeatedly to global memory
+
+/**
+ * single threaded
  */
-__global__ void mse_sum_v2(float *output, float *target, float *sums) {
-	int i = threadIdx.x;
-	sums[i] = pow((output[i] - target[i]), 2);
+__global__ void mse_sum_v2(float *output, float *target, int n_output) {
+	float sum = 0;
+	for (int i = 0; i < n_output; ++i) {
+		sum += pow(output[i] - target[i], 2);
+	}
+	d_mse_sum += sum;
+}
 
-	__syncthreads();
-
-	//TODO: do reduction in shared memory here if number of threads is less than 128 or so?
+/**
+ * single threaded
+ */
+__global__ void calc_mse(int n_output, int n_patterns) {
+	d_mse = d_mse_sum / (n_output * n_patterns);
+	d_mse_sum = 0;
 }
 
 
@@ -963,6 +990,10 @@ void GPUNet::write_net(std::string fname) {
 	}
 }
 
+bool GPUNet::read_net(std::string fname) {
+
+}
+
 
 int GPUNet::get_num_input() {
 	return n_input;
@@ -989,7 +1020,12 @@ void GPUNet::calc_dataset_parameters(TrainingDataSet *tset) {
 	// num patterns = integer div of available memory / mem for single pattern
 	int bytes_per_pattern = sizeof(float)*((n_input+1)+(n_output));
 	int cur_dev = get_current_device();
+	std::cout << "bytes per pattern="<<bytes_per_pattern<<std::endl;
+	std::cout << "total dev mem="<< total_dev_mem(cur_dev)<<std::endl;
+	std::cout << "current mem usage="<< current_mem_usage(cur_dev)<<std::endl;
 	int available_mem = total_dev_mem(cur_dev) - current_mem_usage(cur_dev);
+	std::cout << "available mem="<<available_mem<<std::endl;
+	std::cout << "tset.size="<<tset->size()<<std::endl;
 	n_copyable_patterns = available_mem / bytes_per_pattern;
 	if (n_copyable_patterns > tset->size()) {
 		n_copyable_patterns = tset->size();
@@ -1092,9 +1128,10 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 
 	if (n_sections == 1) { // no section copying necessary
 		copy_to_device_host_array_ptrs_biased(tset->training_set, &d_training_set);
-		std::cout << "datacopied" << std::endl;
+		std::cout << "data copied" << std::endl;
 		while (epoch < max_epochs) {
 			run_training_epoch_dev(d_training_set, tset->training_set.size());
+			std::cout << "Epoch: " << epoch << std::endl;
 			++epoch;
 		}
 	} else {
@@ -1104,11 +1141,11 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 				//copy patterns from [n_sections*n_patterns_copyable, (n_sections+1)*n_patterns_copyable)
 				int p_start = i * n_copyable_patterns;
 				int p_end = p_start + n_copyable_patterns;
-				std::cout << "copying section="<<i<<", pstart="<< p_start << ", pend="<<p_end << std::endl;
 				if (p_end > tset->training_set.size()) p_end = tset->training_set.size();
+				std::cout << "copying section="<<i<<", pstart="<< p_start << ", pend="<<p_end << std::endl;
 				copy_to_device_host_array_ptrs_biased_section(tset->training_set, &d_training_set, p_start, p_end, i == 0 && epoch == 0);
-				std::cout << "datacopied" << std::endl;
-				run_training_epoch_dev_sectioned(d_training_set, p_end-p_start);
+				std::cout << "data copied" << std::endl;
+				run_training_epoch_dev(d_training_set, p_end-p_start);
 			}
 
 			std::cout << "Epoch: " << epoch << std::endl;
@@ -1119,6 +1156,11 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 
 	//out validation accuracy and MSE
 	std::cout << std::endl << "Training Complete. Elapsed Epochs: " << epoch << std::endl;
+
+	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&trainingSetMSE, d_mse, sizeof(float), 0, cudaMemcpyDeviceToHost));
+	std::cout << "MSE = " << trainingSetMSE << std::endl;
+	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&trainingSetAccuracy, d_acc, sizeof(float), 0, cudaMemcpyDeviceToHost));
+	std::cout << "ACC = " << trainingSetAccuracy << std::endl;
 
 	//free training set
 	for (int i = 0; i < tset->training_set.size(); ++i) {
@@ -1197,7 +1239,6 @@ void GPUNet::run_training_epoch(thrust::host_vector<FeatureVector*> feature_vecs
 		backprop_v1();
 	}
 
-
 	//std::cout << "MSE sum: " << mse << std::endl;
 	//std::cout << "inc patterns: " << incorrect_patterns << std::endl;
 	//update training accuracy and MSE
@@ -1234,46 +1275,17 @@ void GPUNet::get_set_accuracy_mse_dev(FeatureVector **feature_vecs, size_t n_fea
 }
 
 void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features) {
-	//int incorrect_patterns = 0;
-	//float mse = 0, mse_tmp = 0;
-	//bool correct_result;
-
 	for (size_t i = 0; i < n_features; ++i) {
-		//mse_tmp = 0;
-		//correct_result = true;
-		std::cout << "feature="<< i << std::endl;
-		feed_forward_v1_2(feature_vecs[i]->input);
-
-		//TODO: maintain these variables on the GPU side
-		/*CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_correct_result, &correct_result, sizeof(correct_result), 0, cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_mse_sum, &mse_tmp, sizeof(mse_tmp), 0, cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-		output_correct<<<1, n_output>>>(d_output, feature_vecs[i]->target);
-		mse_sum<<<1, n_output>>>(d_output, feature_vecs[i]->target);
-		CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&correct_result, d_correct_result, sizeof(correct_result), 0, cudaMemcpyDeviceToHost));
-		CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse_tmp, d_mse_sum, sizeof(mse_tmp), 0, cudaMemcpyDeviceToHost));
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-		if (!correct_result) ++incorrect_patterns;
-		mse += mse_tmp;*/
-
-		//std::cout << "Correct result: " << correct_result << ", mse_tmp: " << mse_tmp << std::endl;
-
-		backprop_v2(feature_vecs[i]->input, feature_vecs[i]->target);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	}
-
-	//update training accuracy and MSE
-	//trainingSetAccuracy = 100 - ((float)incorrect_patterns/n_features * 100);
-	//trainingSetMSE = mse / (n_output * n_features);
-}
-
-void GPUNet::run_training_epoch_dev_sectioned(FeatureVector **feature_vecs, int n_features) {
-	for (size_t i = 0; i < n_features; ++i) {
-		std::cout << "feature="<< i << std::endl;
 		feed_forward_v1_2(feature_vecs[i]->input);
 		backprop_v2(feature_vecs[i]->input, feature_vecs[i]->target);
 		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	}
+	calc_mse<<<1, 1>>>(n_output, n_features);
+	calc_acc<<<1, 1>>>(n_features);
+	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+	//float mse = 0;
+	//CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse, d_mse, sizeof(float), 0, cudaMemcpyDeviceToHost));
+	//std::cout << "Current mse = " << mse << std::endl;
 }
 
 /*
@@ -1363,6 +1375,14 @@ void GPUNet::backprop_v1() {
 
 void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
 	int n_threads = 128;
+
+	//maintain mse state
+	mse_sum_v2<<<1, 1>>>(d_output, d_tar, n_output);
+	output_correct_v2<<<1, 1>>>(d_output, d_tar, n_output);
+	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+	//float mse_sum = 0;
+	//CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse_sum, d_mse_sum, sizeof(float), 0, cudaMemcpyDeviceToHost));
+	//std::cout << "Current mse_sum = " << mse_sum << std::endl;
 
 	output_error_gradients_v2<<<(n_output+n_threads-1)/n_threads, n_threads>>>(d_output, d_tar, d_out_err_gradients, n_output);
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -1560,12 +1580,12 @@ void GPUNet::test_feed_forward(Net &net, NetData &d) {
 
 void GPUNet::test_backprop(Net &net, NetData &d) {
 	NetTrainer nt(&net);
-	std::cout << "CPU net 0" << std::endl;
-	net.print_network();
+	//std::cout << "CPU net 0" << std::endl;
+	//net.print_network();
 
 	net.feed_forward(d.get_training_dataset()->training_set[0]->input);
-	std::cout << "CPU net 1" << std::endl;
-	net.print_network();
+	//std::cout << "CPU net 1" << std::endl;
+	//net.print_network();
 
 	nt.backprop(d.get_training_dataset()->training_set[0]->target);
 	std::cout << "CPU net 2" << std::endl;
@@ -1575,17 +1595,18 @@ void GPUNet::test_backprop(Net &net, NetData &d) {
 	FeatureVector **dv;
 	GPUNet::copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
 
-	std::cout << std::endl << "GPU net 0" << std::endl;
-	print_net();
-	std::cout << std::endl;
+	//std::cout << std::endl << "GPU net 0" << std::endl;
+	//print_net();
+	//std::cout << std::endl;
 
 	feed_forward_v1_2(dv[0]->input);
-	std::cout << "GPU net 1" << std::endl;
-	print_net();
-	std::cout << std::endl;
+	//std::cout << "GPU net 1" << std::endl;
+	//print_net();
+	//std::cout << std::endl;
 
 	std::cout << "GPU net 2" << std::endl;
 	backprop_v2(dv[0]->input, dv[0]->target);
+	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	print_net();
 	std::cout << std::endl;
 	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
@@ -1814,7 +1835,7 @@ size_t GPUNet::dataset_size(TrainingDataSet *tset) {
 size_t GPUNet::total_dev_mem(int dev) {
 	cudaDeviceProp props;
 	cudaGetDeviceProperties(&props, dev);
-	return props.totalGlobalMem;
+	return props.totalGlobalMem - 1611000000; //minus 1.5 gb
 }
 
 
@@ -2063,8 +2084,7 @@ void GPUNet::copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<F
 		*dv = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
 	}
 
-	for (int i = p_start; i < p_end; ++i) {
-
+	for (int i = p_start, p = 0; i < p_end; ++i, ++p) {
 		if (allocate) {
 			//allocate device memory
 			FeatureVector *d_fv = (FeatureVector*)malloc(sizeof(FeatureVector*));
@@ -2082,10 +2102,10 @@ void GPUNet::copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<F
 			//TODO: does setting all in parallel improve speed?
 			set_bias<<<1, 1>>>(n_input, d_inp);
 			CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-			(*dv)[i] = d_fv;
+			(*dv)[p] = d_fv;
 		} else {
-			CUDA_CHECK_RETURN(cudaMemcpy((*dv)[i]->input, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
-			CUDA_CHECK_RETURN(cudaMemcpy((*dv)[i]->target, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
+			CUDA_CHECK_RETURN(cudaMemcpy((*dv)[p]->input, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
+			CUDA_CHECK_RETURN(cudaMemcpy((*dv)[p]->target, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
 		}
 
 	}
