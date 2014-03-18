@@ -84,7 +84,7 @@ int main(void) {
 	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 
 //	gnet.print_net();
-//	gnet.write_net("and.net");
+	gnet.write_net("nets/and.net");
 
 
 //	NetTrainer nt(&net);

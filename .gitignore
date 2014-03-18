@@ -1,6 +1,6 @@
 # Created by http://www.gitignore.io
 Debug/*
-
+datasets/*_10000_5.dat*
 
 ### Eclipse ###
 *.pydevproject

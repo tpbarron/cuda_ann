@@ -706,6 +706,10 @@ GPUNet::GPUNet(int ni, int no, GPUNet::NetworkStructure net_type) {
 	GPUNet::init_vars();
 }
 
+GPUNet::GPUNet(std::string net_file) {
+
+}
+
 GPUNet::~GPUNet() {
 	cudaFree(d_input);
 	cudaFree(d_hidden);
@@ -733,6 +737,8 @@ void GPUNet::init_structure(int ni, int no, GPUNet::NetworkStructure net_type) {
 	} else if (ni != 0) { // if not empty constructor
 		n_input = ni;
 		n_output = no;
+
+		GPUNet::net_type = net_type;
 
 		if (net_type == GPUNet::STANDARD) {
 			n_hidden = ceil(2.0/3.0*ni);
@@ -792,6 +798,21 @@ void GPUNet::init_vars() {
 	for (int i = 0; i < n_gpus; ++i) {
 		gpu_mem[i] = 0;
 	}
+}
+
+bool GPUNet::read_net(std::string fname) {
+	std::ifstream in(fname.c_str());
+
+	if (in.is_open()) {
+		std::string line;
+		while (std::getline(in, line)) {
+			std::cout << line << std::endl;
+		}
+	} else {
+		std::cout << "Could not read file!" << std::endl;
+		return false;
+	}
+	return true;
 }
 
 /*
@@ -955,6 +976,7 @@ void GPUNet::write_net(std::string fname) {
 	if (of.is_open()) {
 		of << "num_epochs=" << epoch << "\n";
 		of << "max_epochs=" << max_epochs << "\n";
+		of << "net_type=" << net_type << "\n";
 		of << "num_layers=" << 3 << "\n";
 		of << "n_layer_0=" << n_input << "\n";
 		of << "n_layer_1=" << n_hidden << "\n";
@@ -988,10 +1010,9 @@ void GPUNet::write_net(std::string fname) {
 	} else {
 		std::cout << "Could not write file!" << std::endl;
 	}
-}
 
-bool GPUNet::read_net(std::string fname) {
-
+	delete[] ih_weights;
+	delete[] ho_weights;
 }
 
 

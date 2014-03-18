@@ -50,6 +50,7 @@ public:
 
 	GPUNet();
 	GPUNet(int ni, int no, GPUNet::NetworkStructure net_type);
+	GPUNet(std::string net_file);
 	~GPUNet();
 
 	void init_structure(int ni, int no, GPUNet::NetworkStructure net_type);
@@ -103,6 +104,7 @@ private:
 	 */
 	int n_gpus;
 	size_t *gpu_mem;
+	NetworkStructure net_type;
 	int n_copyable_patterns;
 	int n_sections;
 
