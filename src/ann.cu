@@ -57,7 +57,7 @@ int main(void) {
 	time_t start, stop;
 
 	NetData d;
-	if (!d.load_file("datasets/and.dat"))
+	if (!d.load_file("datasets/face.dat.norm"))
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
 
@@ -76,7 +76,7 @@ int main(void) {
 
 
 	gnet.set_training_params(0.9, 0.9);
-	gnet.set_stopping_conds(50, 95.0);
+	gnet.set_stopping_conds(10, 95.0);
 	start = clock();
 
 	gnet.train_net_sectioned(d.get_training_dataset());
