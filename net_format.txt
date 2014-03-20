@@ -1,5 +1,6 @@
 num_epochs=#
 max_epochs=#
+net_type=# enum NetworkStructure
 num_layers=#
 n_layer_0=#
 n_layer_1=#
@@ -10,7 +11,7 @@ momentum=#.#
 desired_acc=#
 current_acc=#
 current_mse=#
-weights01=(w1, ... , wn)
-weights12=(w1, ... , wn)
+weights01=w1, ... , wn
+weights12=w1, ... , wn
 ...
-weights2n=(w1, ... , wn)
+weights2n=w1, ... , wn

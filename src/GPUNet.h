@@ -44,8 +44,8 @@ class GPUNet {
 public:
 
 	enum NetworkStructure {
-		STANDARD,
-		GPU_ARCH_OPT
+		STANDARD = 0,
+		GPU_ARCH_OPT = 1
 	};
 
 	GPUNet();
@@ -137,6 +137,12 @@ private:
 	float trainingSetMSE;
 	float validationSetMSE;
 	float generalizationSetMSE;
+
+
+	int get_next_int(std::ifstream &in);
+	long get_next_long(std::ifstream &in);
+	float get_next_float(std::ifstream &in);
+	float* get_next_list(std::ifstream &in);
 
 	dim3 get_threadsm2l1();
 	dim3 get_threadsm2l2();

@@ -54,15 +54,19 @@ void test(GPUNet &gnet, Net &net, NetData &d) {
 int main(void) {
 	srand(time(NULL));
 
+	GPUNet gnet("nets/and.net");
+	gnet.print_net();
+	return 0;
+
 	time_t start, stop;
 
 	NetData d;
-	if (!d.load_file("datasets/face.dat.norm"))
+	if (!d.load_file("datasets/and.dat"))
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
 
 	Net net(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
-	GPUNet gnet(d.num_inputs(), d.num_targets(), GPUNet::STANDARD);
+	//GPUNet gnet(d.num_inputs(), d.num_targets(), GPUNet::STANDARD);
 	gnet.alloc_dev_mem();
 	gnet.init_from_net(net, d);
 

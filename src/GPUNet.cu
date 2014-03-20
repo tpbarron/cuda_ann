@@ -7,6 +7,8 @@
 
 #include "GPUNet.h"
 #include "NetTrainer.h"
+#include <boost/lexical_cast.hpp>
+#include <boost/algorithm/string.hpp>
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
@@ -707,7 +709,7 @@ GPUNet::GPUNet(int ni, int no, GPUNet::NetworkStructure net_type) {
 }
 
 GPUNet::GPUNet(std::string net_file) {
-
+	read_net(net_file);
 }
 
 GPUNet::~GPUNet() {
@@ -800,16 +802,81 @@ void GPUNet::init_vars() {
 	}
 }
 
+
+int GPUNet::get_next_int(std::ifstream &in) {
+	std::string line;
+	std::getline(in, line);
+	std::vector<std::string> res;
+	boost::split(res, line, boost::is_any_of("="));
+	return boost::lexical_cast<int>(res[1]);
+}
+
+long GPUNet::get_next_long(std::ifstream &in) {
+	std::string line;
+	std::getline(in, line);
+	std::vector<std::string> res;
+	boost::split(res, line, boost::is_any_of("="));
+	return boost::lexical_cast<long>(res[1]);
+}
+
+float GPUNet::get_next_float(std::ifstream &in) {
+	std::string line;
+	std::getline(in, line);
+	std::vector<std::string> res;
+	boost::split(res, line, boost::is_any_of("="));
+	return boost::lexical_cast<float>(res[1]);
+}
+
+float* GPUNet::get_next_list(std::ifstream &in) {
+	std::string line;
+	std::getline(in, line);
+	std::vector<std::string> res;
+	boost::split(res, line, boost::is_any_of("="));
+	std::vector<std::string> list;
+	boost::split(list, res[1], boost::is_any_of(", "));
+
+	float *fl_list = new float[list.size()];
+	//just overwrite random GPU values
+	for (size_t i = 0; i < list.size(); ++i) {
+		fl_list[i] = boost::lexical_cast<float>(list[i]);
+	}
+	return fl_list;
+}
+
 bool GPUNet::read_net(std::string fname) {
 	std::ifstream in(fname.c_str());
 
 	if (in.is_open()) {
-		std::string line;
-		while (std::getline(in, line)) {
-			std::cout << line << std::endl;
-		}
+		// num epochs
+		epoch = get_next_long(in);
+		max_epochs = get_next_long(in);
+		net_type = (GPUNet::NetworkStructure)get_next_int(in);
+
+		//skip n_layers
+		get_next_int(in);
+		n_input = get_next_int(in);
+		n_hidden = get_next_int(in);
+		n_output = get_next_int(in);
+
+		l_rate = get_next_float(in);
+		momentum = get_next_float(in);
+		desired_acc = get_next_float(in);
+		trainingSetAccuracy = get_next_float(in);
+		generalizationSetAccuracy = get_next_float(in);
+		validationSetAccuracy = get_next_float(in);
+		trainingSetMSE = get_next_float(in);
+		generalizationSetMSE = get_next_float(in);
+		validationSetMSE = get_next_float(in);
+
+		float *ih_weights = get_next_list(in);
+		CUDA_CHECK_RETURN(cudaMemcpy(d_ih_weights, ih_weights, (n_input+1)*n_hidden*sizeof(float), cudaMemcpyHostToDevice));
+		float *ho_weights = get_next_list(in);
+		CUDA_CHECK_RETURN(cudaMemcpy(d_ho_weights, ho_weights, (n_hidden+1)*n_output*sizeof(float), cudaMemcpyHostToDevice));
+
+		delete[] ih_weights;
+		delete[] ho_weights;
 	} else {
-		std::cout << "Could not read file!" << std::endl;
+		std::cout << "Could not read net file!" << std::endl;
 		return false;
 	}
 	return true;
