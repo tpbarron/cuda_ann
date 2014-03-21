@@ -709,7 +709,8 @@ GPUNet::GPUNet(int ni, int no, GPUNet::NetworkStructure net_type) {
 }
 
 GPUNet::GPUNet(std::string net_file) {
-	read_net(net_file);
+	std::cout << "Initializing from net file: " << net_file << "." << std::endl;
+	init_vars();
 }
 
 GPUNet::~GPUNet() {
@@ -739,9 +740,7 @@ void GPUNet::init_structure(int ni, int no, GPUNet::NetworkStructure net_type) {
 	} else if (ni != 0) { // if not empty constructor
 		n_input = ni;
 		n_output = no;
-
 		GPUNet::net_type = net_type;
-
 		if (net_type == GPUNet::STANDARD) {
 			n_hidden = ceil(2.0/3.0*ni);
 		} else if (net_type == GPU_ARCH_OPT) {
@@ -758,7 +757,7 @@ void GPUNet::init_vars() {
 	l_rate = GPU_LEARNING_RATE;
 	momentum = GPU_MOMENTUM;
 	desired_acc = GPU_DESIRED_ACCURACY;
-	n_gpus = N_GPUS;
+	CUDA_CHECK_RETURN(cudaGetDeviceCount(&n_gpus));
 
 	epoch = 0;
 	trainingSetAccuracy = 0;
@@ -797,6 +796,7 @@ void GPUNet::init_vars() {
 
 	//init gpu mem to 0 for each gpu
 	gpu_mem = new size_t[n_gpus];
+	memset(gpu_mem, 0, n_gpus*sizeof(size_t));
 	for (int i = 0; i < n_gpus; ++i) {
 		gpu_mem[i] = 0;
 	}
@@ -845,7 +845,6 @@ float* GPUNet::get_next_list(std::ifstream &in) {
 
 bool GPUNet::read_net(std::string fname) {
 	std::ifstream in(fname.c_str());
-
 	if (in.is_open()) {
 		// num epochs
 		epoch = get_next_long(in);
@@ -857,6 +856,8 @@ bool GPUNet::read_net(std::string fname) {
 		n_input = get_next_int(in);
 		n_hidden = get_next_int(in);
 		n_output = get_next_int(in);
+
+		alloc_dev_mem();
 
 		l_rate = get_next_float(in);
 		momentum = get_next_float(in);
@@ -1057,20 +1058,19 @@ void GPUNet::write_net(std::string fname) {
 		of << "tset_mse=" << trainingSetMSE << "\n";
 		of << "gset_mse=" << generalizationSetMSE << "\n";
 		of << "vset_mse=" << validationSetMSE << "\n";
-		of << "weights_ih=(";
+		of << "weights_ih=";
 		for (int i = 0, l = (n_input+1)*n_hidden; i < l; ++i) {
 			of << ih_weights[i];
 			if (i != l-1)
 				of << ",";
 		}
-		of << ")\n";
-		of << "weights_ho=(";
+		of << "\n";
+		of << "weights_ho=";
 		for (int i = 0, l = (n_hidden+1)*n_output; i < l; ++i) {
 			of << ho_weights[i];
 			if (i != l-1)
 				of << ",";
 		}
-		of << ")";
 
 		of.flush();
 		of.close();
