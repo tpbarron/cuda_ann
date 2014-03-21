@@ -1462,33 +1462,37 @@ void GPUNet::backprop_v1() {
 
 
 void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
+	cudaStream_t mse_sum_stream, output_correct_stream, bprop_stream;
+	CUDA_CHECK_RETURN(cudaStreamCreate(&mse_sum_stream));
+	CUDA_CHECK_RETURN(cudaStreamCreate(&output_correct_stream));
+	CUDA_CHECK_RETURN(cudaStreamCreate(&bprop_stream));
 	int n_threads = 128;
 
 	//maintain mse state
-	mse_sum_v2<<<1, 1>>>(d_output, d_tar, n_output);
-	output_correct_v2<<<1, 1>>>(d_output, d_tar, n_output);
+	mse_sum_v2<<<1, 1, 0, mse_sum_stream>>>(d_output, d_tar, n_output);
+	output_correct_v2<<<1, 1, 0, output_correct_stream>>>(d_output, d_tar, n_output);
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	//float mse_sum = 0;
 	//CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse_sum, d_mse_sum, sizeof(float), 0, cudaMemcpyDeviceToHost));
 	//std::cout << "Current mse_sum = " << mse_sum << std::endl;
 
-	output_error_gradients_v2<<<(n_output+n_threads-1)/n_threads, n_threads>>>(d_output, d_tar, d_out_err_gradients, n_output);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+	output_error_gradients_v2<<<(n_output+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(d_output, d_tar, d_out_err_gradients, n_output);
+	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-	update_hidden_output_deltas_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads>>>(n_hidden, n_output, l_rate, momentum, d_hidden, d_out_err_gradients, d_ho_deltas);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+	update_hidden_output_deltas_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, l_rate, momentum, d_hidden, d_out_err_gradients, d_ho_deltas);
+	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-	hidden_error_gradients_v2<<<(n_hidden+n_threads-1)/n_threads, n_threads>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+	hidden_error_gradients_v2<<<(n_hidden+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-	update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas);
+	update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas);
 
-	update_input_hidden_deltas_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads>>>(n_input, n_hidden, l_rate, momentum,
+	update_input_hidden_deltas_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_input, n_hidden, l_rate, momentum,
 				d_inp, d_hid_err_gradients, d_ih_deltas);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-	update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas);
+	update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas);
 }
 
 void GPUNet::feed_forward_v1() {
@@ -1676,8 +1680,8 @@ void GPUNet::test_backprop(Net &net, NetData &d) {
 	//net.print_network();
 
 	nt.backprop(d.get_training_dataset()->training_set[0]->target);
-	std::cout << "CPU net 2" << std::endl;
-	net.print_network();
+	//std::cout << "CPU net 2" << std::endl;
+	//net.print_network();
 
 	std::cout << "Testing backprop_v2" << std::endl;
 	FeatureVector **dv;
@@ -1692,11 +1696,11 @@ void GPUNet::test_backprop(Net &net, NetData &d) {
 	//print_net();
 	//std::cout << std::endl;
 
-	std::cout << "GPU net 2" << std::endl;
+	//std::cout << "GPU net 2" << std::endl;
 	backprop_v2(dv[0]->input, dv[0]->target);
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	print_net();
-	std::cout << std::endl;
+	//print_net();
+	//std::cout << std::endl;
 	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
 
 //	net.feed_forward(d.get_training_dataset()->training_set[1]->input);
