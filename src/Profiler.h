@@ -30,7 +30,7 @@ public:
 	float profile_feed_forward_v1();
 	float profile_feed_forward_v1_2(NetData &d);
 	float profile_feed_forward_v2();
-	float profile_feed_forward_v2_2();
+	float profile_feed_forward_v2_2(NetData &d);
 
 	float profile_backprop_v1();
 	float profile_backprop_v2(NetData &d);

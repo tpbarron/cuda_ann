@@ -77,7 +77,7 @@ public:
 	void feed_forward_v1(); //inputs already copied
 	void feed_forward_v1_2(float *d_inp);
 	void feed_forward_v2(); //inputs already copied
-	void feed_forward_v2_2(); //inputs already copied
+	void feed_forward_v2_2(float *d_inp); //inputs already copied
 
 	void backprop_v1(); //targets already copied
 	void backprop_v2(float *d_inp, float *d_tar);
@@ -105,6 +105,12 @@ private:
 	NetworkStructure net_type;
 	int n_copyable_patterns;
 	int n_sections;
+
+	/*
+	 * GPU state
+	 */
+	cudaStream_t err_calc_stream, weight_update_stream;
+	cudaEvent_t event1;
 
 	/*
 	 * GPU memory

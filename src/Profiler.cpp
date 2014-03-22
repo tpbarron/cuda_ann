@@ -133,13 +133,16 @@ float Profiler::profile_feed_forward_v2() {
 	return milliseconds;
 }
 
-float Profiler::profile_feed_forward_v2_2() {
+float Profiler::profile_feed_forward_v2_2(NetData &d) {
 	std::cout << "Profiling feed forward v2_2 over " << iterations << " iterations." << std::endl;
+
+	FeatureVector **dv;
+	gnet->copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
 
 	cuda_start();
 
 	for (int i = 0; i < iterations; ++i) {
-		gnet->feed_forward_v2_2();
+		gnet->feed_forward_v2_2(dv[0]->input);
 		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	}
 
