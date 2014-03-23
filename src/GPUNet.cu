@@ -137,14 +137,11 @@ __global__ void init_weights_v2(int n1, int n2, float *weights, curandState *sta
 }
 
 
-__global__ void init_deltas_v2(int n1, int n2, float *deltas) {
+__global__ void init_deltas_v2(unsigned int n1, unsigned int n2, float *deltas) {
 	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (i < (n1+1)*n2) {
-		int node_l1 = i % (n1+1);
-		int node_l2 = i % n2;
-
-		deltas[n2*node_l1 + node_l2] = 0;
+		deltas[i] = 0;
 	}
 }
 
@@ -268,7 +265,6 @@ __global__ void feed_forward_layer_v2_2(unsigned int pow2, int n_layer1, int n_l
 	}
 }
 
-
 /*
  * generic version
  */
@@ -279,12 +275,17 @@ __global__ void compute_activation_v2(float* nodes, float *sums, int n_layer, in
 		nodes[i] = sigmoid(sums[i*stride]);
 }
 
+__global__ void clamp_outputs(float *output, int n) {
+	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
+	if (i < n) {
+		output[i] = clamp(output[i]);
+	}
+}
 
 /*
  * Copied form NVIDIA presentation
  * http://developer.download.nvidia.com/compute/cuda/1.1-Beta/x86_website/projects/reduction/doc/reduction.pdf
  */
-
 template <unsigned int blockSize>
 __global__ void reduce_kernel(float *g_idata, float *g_odata, unsigned int n, int offset) {
 	g_idata = &(g_idata[n*offset]);
@@ -319,14 +320,6 @@ __global__ void reduce_kernel(float *g_idata, float *g_odata, unsigned int n, in
  *
  */
 
-/*
- * called with threads(n_output)
- */
-__global__ void output_error_gradients(float* output, float* target, float* output_err_gradients) {
-	int i = threadIdx.x;
-	output_err_gradients[i] = calc_output_gradient(output[i], target[i]);
-	//printf("out_err_grad[%d] = %f, output = %f, target = %f\n", i, output_err_gradients[i], output[i], target[i]);
-}
 
 /*
  * called generically, pow of 2 threads
@@ -338,27 +331,6 @@ __global__ void output_error_gradients_v2(float* output, float* target, float* o
 		output_err_gradients[i] = calc_output_gradient(output[i], target[i]);
 		//printf("out_err_grad[%d] = %f, output = %f, target = %f\n", i, output_err_gradients[i], output[i], target[i]);
 	}
-}
-
-/*
- * called with threads = (nh+1, no, 1)
- */
-__global__ void update_hidden_output_deltas(int no, float l_rate, float momentum,
-		float* hidden, float* output_err_gradients, float* delta_ho) {
-
-	int j = threadIdx.x; //hidden node
-	int k = threadIdx.y; //output node
-
-	//This probably doesn't improve much
-	//I assume that what really happens is every node writes the same value into shared memory
-	//so really every thread is still doing the work
-	//__shared__ float out_err_grad_k; out_err_grad_k = output_err_gradients[k];
-	//__syncthreads();
-
-	delta_ho[no*j + k] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[no*j + k];
-	//printf("delta_ho(%d, %d) = %f, l_rate = %f, hidden[%d] = %f, out_err_gradients[%d] = %f, momentum = %f\n",
-	//		j, k, delta_ho[no*j+k], l_rate, j, hidden[j], k, output_err_gradients[k], momentum);
-
 }
 
 
@@ -393,15 +365,6 @@ __device__ float calc_hidden_gradient(int j, int no, float* hidden, float* d_ho_
 }
 
 /*
- * called with threads = (nh)
- */
-__global__ void hidden_error_gradients(int no, float* hidden, float* d_ho_weights, float* hidden_err_gradients, float* output_err_gradients) {
-	int j = threadIdx.x;
-	hidden_err_gradients[j] = calc_hidden_gradient(j, no, hidden, d_ho_weights, output_err_gradients);
-	//printf("hidden_err_grad[%d] = %f\n", j, hidden_err_gradients[j]);
-}
-
-/*
  * called generically, pow of 2 threads
  */
 __global__ void hidden_error_gradients_v2(int nh, int no, float* hidden, float* d_ho_weights, float* hidden_err_gradients, float* output_err_gradients) {
@@ -411,45 +374,6 @@ __global__ void hidden_error_gradients_v2(int nh, int no, float* hidden, float* 
 		hidden_err_gradients[j] = calc_hidden_gradient(j, no, hidden, d_ho_weights, output_err_gradients);
 		//printf("hidden_err_grad[%d] = %f\n", j, hidden_err_gradients[j]);
 	}
-}
-
-
-/*
- * called with blocks(no), threads(nh)
- *
- * reduce this list and then call calc gradients
- *
- * TODO: generalize this to pow 2 threads / blocks
- */
-__global__ void hidden_error_gradients_v3(int no, float *sums, float *d_ho_weights, float *output_err_gradients) {
-	int j = threadIdx.x;
-	int k = blockIdx.x;
-
-	sums[j*no + k] = d_ho_weights[j*no + k] * output_err_gradients[k];
-}
-
-
-/*
- * called with threads(nh)
- *
- * TODO: generalize this to pow 2 threads / blocks
- */
-__global__ void calc_gradients(float *sums, float *hidden, float*hidden_err_gradients) {
-	int i = threadIdx.x;
-	hidden_err_gradients[i] = hidden[i] * (1 - hidden[i]) * sums[i*blockDim.x];
-}
-
-
-__global__ void update_input_hidden_deltas(int nh, float l_rate, float momentum,
-		float* input, float* hidden_err_gradients, float* delta_ih) {
-
-	int i = threadIdx.y; //input node
-	int j = threadIdx.x; //hidden node
-
-	delta_ih[nh*i + j] = l_rate * input[i] * hidden_err_gradients[j] + momentum * delta_ih[nh*i + j];
-
-	//printf("delta_ho(%d, %d) = %f, l_rate = %f, input[%d] = %f, hidden_err_gradients[%d] = %f, momentum = %f\n",
-	//			i, j, delta_ih[nh*i + j], l_rate, i, input[i], j, hidden_err_gradients[j], momentum);
 }
 
 /*
@@ -493,23 +417,6 @@ __global__ void update_weights_v2(int n1, int n2, float *d_weights, float *delta
 	}
 }
 
-
-//blocks(n_output), threads(n_hidden+1)
-__global__ void update_weights_ho(int no, float* d_ho_weights, float* deltas_ho) {
-	int k = blockIdx.x; //output
-	int j = threadIdx.x; //hidden
-
-	d_ho_weights[j*no + k] += deltas_ho[j*no + k];
-}
-
-//blocks(n_hidden), threads(n_input+1)
-__global__ void update_weights_ih(int nh, float* d_ih_weights, float* deltas_ih) {
-	int k = blockIdx.x; //hidden
-	int j = threadIdx.x; //input
-
-	d_ih_weights[j*nh + k] += deltas_ih[j*nh + k];
-}
-
 __global__ void print_gpu_net(int n_input, int n_hidden, int n_output,
 		float *input, float *hidden, float *output, float *ih_weights, float *ho_weights) {
 	for (int i = 0; i <= n_input; ++i) {
@@ -543,36 +450,6 @@ __global__ void print_gpu_net(int n_input, int n_hidden, int n_output,
  * --------- Debugging ------------
  *
  */
-
-__global__ void print_floats(int n_input, float* d_input_2, FeatureVector *d_fv) {
-	printf("d_fv.input: %f\n", d_fv->input[0]);
-	printf("d_fv.input: %f\n", d_fv->input[1]);
-	printf("d_fv.input: %f\n", d_fv->input[2]);
-	for(int i = 0; i < n_input; ++i) {
-		printf("%d: %f\n", i, d_input_2[i]);
-	}
-}
-
-__global__ void print_floats2(int n_input, FeatureVector *d_fv) {
-	printf("d_fv.input: %f\n", d_fv->input[0]);
-	printf("d_fv.input: %f\n", d_fv->input[1]);
-}
-
-__global__ void print_all(int n_input, int n_output, FeatureVector **dv) {
-	for (int i = 0; i < 4; ++i) {
-		printf("Pattern %d\n", i);
-		printf("Input: ");
-		for (int j = 0; j < n_input; ++j) {
-			printf("%f ", dv[i]->input[j]);
-		}
-		printf("\nTarget: ");
-		for (int k = 0; k < n_output; ++k) {
-			printf("%f ", dv[i]->target[k]);
-		}
-		printf("\n");
-	}
-
-}
 
 __global__ void print_target(int n_output, float *target) {
 	for (int i = 0; i < n_output; ++i) {
@@ -632,7 +509,7 @@ GPUNet::~GPUNet() {
  */
 
 
-void GPUNet::init_structure(int ni, int no, GPUNet::NetworkStructure net_type) {
+void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNet::NetworkStructure net_type) {
 	if (n_input != 0) { // constructor initializing nodes has been called, error out
 		std::cerr << "Network has already been initialized" << std::endl;
 	} else if (ni != 0) { // if not empty constructor
@@ -979,6 +856,34 @@ void GPUNet::write_net(std::string fname) {
 	delete[] ho_weights;
 }
 
+/*
+ * run the input through the network
+ */
+float* GPUNet::evaluate(float* input) {
+	//copy to device
+	//feed forward
+	//copy back output
+	int threads = 128;
+	float *h_out = new float[n_output];
+	CUDA_CHECK_RETURN(cudaMemcpy((void*)d_input, (void*)input, n_input*sizeof(float), cudaMemcpyHostToDevice));
+	feed_forward_v1_2(d_input);
+	clamp_outputs<<<(n_output+threads-1)/threads, threads>>>(d_output, n_output);
+	CUDA_CHECK_RETURN(cudaMemcpy(h_out, d_output, n_output*sizeof(float), cudaMemcpyDeviceToHost));
+	return h_out;
+}
+
+float* GPUNet::batch_evaluate(float** inputs) {
+	//copy to device
+	//feed forward
+	//copy back output
+	int threads = 128;
+	float *h_out = new float[n_output];
+	CUDA_CHECK_RETURN(cudaMemcpy((void*)d_input, (void*)input, n_input*sizeof(float), cudaMemcpyHostToDevice));
+	feed_forward_v1_2(d_input);
+	clamp_outputs<<<(n_output+threads-1)/threads, threads>>>(d_output, n_output);
+	CUDA_CHECK_RETURN(cudaMemcpy(h_out, d_output, n_output*sizeof(float), cudaMemcpyDeviceToHost));
+	return h_out;
+}
 
 int GPUNet::get_num_input() {
 	return n_input;
@@ -1314,26 +1219,6 @@ size_t GPUNet::current_mem_usage(int dev) {
  */
 
 
-dim3 GPUNet::get_threadsm2l1() {
-	dim3 threadsm2l1;
-	int s = (int)ceil(sqrt(n_input+1));
-
-	threadsm2l1.x = s;
-	threadsm2l1.y = s;
-
-	return threadsm2l1;
-}
-
-dim3 GPUNet::get_threadsm2l2() {
-	dim3 threadsm2l2;
-	int s = (int)ceil(sqrt(n_hidden+1));
-
-	threadsm2l2.x = s;
-	threadsm2l2.y = s;
-
-	return threadsm2l2;
-}
-
 void GPUNet::add_gpu_mem(int bytes) {
 	gpu_mem[get_current_device()] += bytes;
 }
@@ -1379,6 +1264,7 @@ void GPUNet::copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVe
 		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_inp, (n_input+1)*sizeof(float)));
 		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_tar, (n_output)*sizeof(float)));
 
+		//TODO: cuda-memcheck claims there is an unspecified launch failure at this line...
 		CUDA_CHECK_RETURN(cudaMemcpy(d_inp, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
 		CUDA_CHECK_RETURN(cudaMemcpy(d_tar, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
 
@@ -1422,14 +1308,14 @@ void GPUNet::copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<F
 			d_fv->input = d_inp;
 			d_fv->target = d_tar;
 
-			//TODO: does setting all in parallel improve speed?
+			//NOTE: no need to synchronize since on default stream and
+			//next GPU function could not start until this one finishes
 			set_bias<<<1, 1>>>(n_input, d_inp);
-			CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+
 			(*dv)[p] = d_fv;
 		} else {
 			CUDA_CHECK_RETURN(cudaMemcpy((*dv)[p]->input, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
 			CUDA_CHECK_RETURN(cudaMemcpy((*dv)[p]->target, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
 		}
-
 	}
 }

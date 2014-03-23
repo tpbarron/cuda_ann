@@ -23,8 +23,8 @@ public:
 	~NetData();
 
 	size_t num_feature_vecs();
-	int num_inputs();
-	int num_targets();
+	unsigned int num_inputs();
+	unsigned int num_targets();
 
 	bool load_file(std::string fname);
 	TrainingDataSet* get_training_dataset();
@@ -35,8 +35,8 @@ private:
 
 	// storage
 	std::vector<FeatureVector*> data;
-	int n_inputs;
-	int n_targets;
+	unsigned int n_inputs;
+	unsigned int n_targets;
 
 	int training_data_end_index;
 

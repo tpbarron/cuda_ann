@@ -113,11 +113,11 @@ size_t NetData::num_feature_vecs() {
 	return data.size();
 }
 
-int NetData::num_inputs() {
+unsigned int NetData::num_inputs() {
 	return n_inputs;
 }
 
-int NetData::num_targets() {
+unsigned int NetData::num_targets() {
 	return n_targets;
 }
 

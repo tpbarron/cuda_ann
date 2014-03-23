@@ -58,7 +58,7 @@ int main(void) {
 	time_t start, stop;
 
 	NetData d;
-	if (!d.load_file("datasets/and.dat"))
+	if (!d.load_file("datasets/face.dat.norm"))
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
 
@@ -77,13 +77,13 @@ int main(void) {
 //	return 0;
 
 	gnet.set_training_params(0.9, 0.9);
-	gnet.set_stopping_conds(60, 95.0);
+	gnet.set_stopping_conds(10, 95.0);
 	start = clock();
 	gnet.train_net_sectioned(d.get_training_dataset());
 	stop = clock();
 	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
-	gnet.print_net();
-	gnet.write_net("nets/and.net");
+	//gnet.print_net();
+	//gnet.write_net("nets/and.net");
 
 
 //	NetTrainer nt(&net);
@@ -95,7 +95,7 @@ int main(void) {
 //	std::cout << "CPU time: " << ((double)stop - start) / CLOCKS_PER_SEC << std::endl;
 
 	CUDA_CHECK_RETURN(cudaDeviceReset());
-	std::cout << "device reset\n";
+	std::cout << "Device reset" << std::endl;
 
 	return 0;
 }

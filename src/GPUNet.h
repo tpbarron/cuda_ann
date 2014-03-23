@@ -51,7 +51,7 @@ public:
 	GPUNet(std::string net_file);
 	~GPUNet();
 
-	void init_structure(int ni, int no, GPUNet::NetworkStructure net_type);
+	void init_structure(unsigned int ni, unsigned int no, GPUNet::NetworkStructure net_type);
 	void init_vars();
 	void alloc_dev_mem();
 	void init_from_net(Net &net, NetData &d);
@@ -71,29 +71,28 @@ public:
 	void set_desired_accuracy(float acc);
 	void set_stopping_conds(int me, float acc);
 	void calc_dataset_parameters(TrainingDataSet *tset);
-	void train_net(TrainingDataSet *tset);
 	void train_net_sectioned(TrainingDataSet *tset);
 
-	void feed_forward_v1(); //inputs already copied
 	void feed_forward_v1_2(float *d_inp);
-	void feed_forward_v2(); //inputs already copied
 	void feed_forward_v2_2(unsigned int n, float *d_inp, float *d_sums); //inputs already copied
 
-	void backprop_v1(); //targets already copied
 	void backprop_v2(float *d_inp, float *d_tar);
+
+	float* evaluate(float* input);
+	float* batch_evaluate(float** inputs);
 
 	bool validate_output(float* desired_output);
 	bool validate_weights(float *desired_ih_weights, float *desired_ho_weights);
 
 	void test_backprop(Net &net, NetData &d);
 	void test_feed_forward(Net &net, NetData &d);
-	void test_reduction();
-
 	void run_parallel(Net &net, NetData &d);
 
-	int num_patterns_copyable(TrainingDataSet *tset);
 	size_t current_mem_usage(int dev);
 
+	void copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
+	void copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv,
+			int p_start, int p_end, bool allocate);
 
 private:
 
@@ -116,7 +115,7 @@ private:
 	 * GPU memory
 	 */
 	clock_t start, finish;
-	int n_input, n_hidden, n_output;
+	unsigned int n_input, n_hidden, n_output;
 	float *d_input, *d_hidden, *d_output, *d_target;
 
 	float *d_ih_weights, *d_ho_weights;
@@ -142,37 +141,17 @@ private:
 	float validationSetMSE;
 	float generalizationSetMSE;
 
+	void run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features);
 
 	int get_next_int(std::ifstream &in);
 	long get_next_long(std::ifstream &in);
 	float get_next_float(std::ifstream &in);
 	float* get_next_list(std::ifstream &in);
 
-	dim3 get_threadsm2l1();
-	dim3 get_threadsm2l2();
-
 	void add_gpu_mem(int bytes);
 	int get_current_device();
 	size_t dataset_size(TrainingDataSet *tset);
 	size_t total_dev_mem(int dev);
-
-	void copy_to_device(thrust::host_vector<FeatureVector*> &hv, FeatureVector*** dv);
-	void copy_to_device_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
-	void copy_to_device_host_array(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
-	void copy_to_device_host_array_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
-
-public:
-	void copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
-	void copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv,
-			int p_start, int p_end, bool allocate);
-private:
-	void get_set_accuracy_mse(thrust::host_vector<FeatureVector*> set, float* s_acc, float* s_mse);
-	void get_set_accuracy_mse_dev(FeatureVector **feature_vecs, size_t n_features, float* s_acc, float* s_mse);
-	void run_training_epoch(thrust::host_vector<FeatureVector*> feature_vecs);
-	void run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features);
-
-	float* reduce(int n, int len, float* d_sums, float *d_y);
-	float* execute_split_reduction(int n, int offset, float *d_x, float *d_y);
 
 };
 

@@ -1,0 +1,899 @@
+6977 361 1
+Data file: datasets/face.dat.norm
+Read complete: 6977 patterns loaded
+Initializing CPU weights
+Memory allocated on device
+Data copied to device
+
+Determining data set statistics
+ bytes per pattern = 1452
+ total dev mem = 536155968
+ current mem usage = 703272
+ available mem = 535452696
+ tset.size = 6977
+ n_copyable_patterns = 6977, n_sections = 1
+
+
+Neural Network Training Starting: 
+----------------------------------------------------
+LR: 0.9, Momentum: 0.9, Max Epochs: 1
+361 Input Neurons, 241 Hidden Neurons, 1 Output Neurons
+----------------------------------------------------
+
+Copying data
+========= CUDA-MEMCHECK
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (95,0,0) in block (681,0,0)
+=========     Address 0x5005ea77c is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (94,0,0) in block (681,0,0)
+=========     Address 0x5005ea778 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (93,0,0) in block (681,0,0)
+=========     Address 0x5005ea774 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (92,0,0) in block (681,0,0)
+=========     Address 0x5005ea770 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (91,0,0) in block (681,0,0)
+=========     Address 0x5005ea76c is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (90,0,0) in block (681,0,0)
+=========     Address 0x5005ea768 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (89,0,0) in block (681,0,0)
+=========     Address 0x5005ea764 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (88,0,0) in block (681,0,0)
+=========     Address 0x5005ea760 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (87,0,0) in block (681,0,0)
+=========     Address 0x5005ea75c is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (86,0,0) in block (681,0,0)
+=========     Address 0x5005ea758 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (85,0,0) in block (681,0,0)
+=========     Address 0x5005ea754 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (84,0,0) in block (681,0,0)
+=========     Address 0x5005ea750 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (83,0,0) in block (681,0,0)
+=========     Address 0x5005ea74c is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (82,0,0) in block (681,0,0)
+=========     Address 0x5005ea748 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (81,0,0) in block (681,0,0)
+=========     Address 0x5005ea744 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (80,0,0) in block (681,0,0)
+=========     Address 0x5005ea740 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (79,0,0) in block (681,0,0)
+=========     Address 0x5005ea73c is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (78,0,0) in block (681,0,0)
+=========     Address 0x5005ea738 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (77,0,0) in block (681,0,0)
+=========     Address 0x5005ea734 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (76,0,0) in block (681,0,0)
+=========     Address 0x5005ea730 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (75,0,0) in block (681,0,0)
+=========     Address 0x5005ea72c is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (74,0,0) in block (681,0,0)
+=========     Address 0x5005ea728 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (127,0,0) in block (681,0,0)
+=========     Address 0x5005ea7fc is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (126,0,0) in block (681,0,0)
+=========     Address 0x5005ea7f8 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (125,0,0) in block (681,0,0)
+=========     Address 0x5005ea7f4 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (124,0,0) in block (681,0,0)
+=========     Address 0x5005ea7f0 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (123,0,0) in block (681,0,0)
+=========     Address 0x5005ea7ec is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (122,0,0) in block (681,0,0)
+=========     Address 0x5005ea7e8 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (121,0,0) in block (681,0,0)
+=========     Address 0x5005ea7e4 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (120,0,0) in block (681,0,0)
+=========     Address 0x5005ea7e0 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (119,0,0) in block (681,0,0)
+=========     Address 0x5005ea7dc is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (118,0,0) in block (681,0,0)
+=========     Address 0x5005ea7d8 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (117,0,0) in block (681,0,0)
+=========     Address 0x5005ea7d4 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (116,0,0) in block (681,0,0)
+=========     Address 0x5005ea7d0 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (115,0,0) in block (681,0,0)
+=========     Address 0x5005ea7cc is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (114,0,0) in block (681,0,0)
+=========     Address 0x5005ea7c8 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (113,0,0) in block (681,0,0)
+=========     Address 0x5005ea7c4 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (112,0,0) in block (681,0,0)
+=========     Address 0x5005ea7c0 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (111,0,0) in block (681,0,0)
+=========     Address 0x5005ea7bc is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (110,0,0) in block (681,0,0)
+=========     Address 0x5005ea7b8 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (109,0,0) in block (681,0,0)
+=========     Address 0x5005ea7b4 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (108,0,0) in block (681,0,0)
+=========     Address 0x5005ea7b0 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (107,0,0) in block (681,0,0)
+=========     Address 0x5005ea7ac is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (106,0,0) in block (681,0,0)
+=========     Address 0x5005ea7a8 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (105,0,0) in block (681,0,0)
+=========     Address 0x5005ea7a4 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (104,0,0) in block (681,0,0)
+=========     Address 0x5005ea7a0 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (103,0,0) in block (681,0,0)
+=========     Address 0x5005ea79c is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (102,0,0) in block (681,0,0)
+=========     Address 0x5005ea798 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (101,0,0) in block (681,0,0)
+=========     Address 0x5005ea794 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (100,0,0) in block (681,0,0)
+=========     Address 0x5005ea790 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (99,0,0) in block (681,0,0)
+=========     Address 0x5005ea78c is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (98,0,0) in block (681,0,0)
+=========     Address 0x5005ea788 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (97,0,0) in block (681,0,0)
+=========     Address 0x5005ea784 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Invalid __global__ write of size 4
+=========     at 0x00000188 in /home/trevor/Documents/dev/cuda/cuda-workspace/cuda_ann/Debug/../src/GPUNet.cu:145:init_deltas_v2(unsigned int, unsigned int, float*)
+=========     by thread (96,0,0) in block (681,0,0)
+=========     Address 0x5005ea780 is out of bounds
+=========     Saved host backtrace up to driver entry point at kernel launch time
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so (cuLaunchKernel + 0x331) [0xcd5d1]
+=========     Host Frame:Debug/cuda_ann [0x35988]
+=========     Host Frame:Debug/cuda_ann [0x54e53]
+=========     Host Frame:Debug/cuda_ann [0xe718]
+=========     Host Frame:Debug/cuda_ann [0xb634]
+=========     Host Frame:Debug/cuda_ann [0xb664]
+=========     Host Frame:Debug/cuda_ann [0x71d4]
+=========     Host Frame:Debug/cuda_ann [0x1c93c]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= Program hit error 4 on CUDA API call to cudaMemcpy 
+=========     Saved host backtrace up to driver entry point at error
+=========     Host Frame:/usr/lib/nvidia-current/libcuda.so [0x26d660]
+=========     Host Frame:Debug/cuda_ann [0x5abef]
+=========     Host Frame:Debug/cuda_ann [0xabde]
+=========     Host Frame:Debug/cuda_ann [0x89ed]
+=========     Host Frame:Debug/cuda_ann [0x1c9a4]
+=========     Host Frame:/lib/x86_64-linux-gnu/libc.so.6 (__libc_start_main + 0xed) [0x2176d]
+=========     Host Frame:Debug/cuda_ann [0x5239]
+=========
+========= ERROR SUMMARY: 55 errors
