@@ -59,38 +59,6 @@ void Profiler::cuda_stop() {
 	cudaEventSynchronize(cu_stop);
 }
 
-float Profiler::profile_feed_forward_v1() {
-	std::cout << "Profiling feed forward v1 over " << iterations << " iterations." << std::endl;
-
-	cuda_start();
-
-	for (int i = 0; i < iterations; ++i) {
-		gnet->feed_forward_v1();
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	}
-
-
-	cuda_stop();
-
-	float milliseconds = 0;
-	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
-
-	/*
-	 * total_l1->l2 = n_hidden*4*((n_layer1+1)*2 + n_layer2)
-	 * total_l2->l3 = n_output*4*((n_layer2+1)*2 + n_layer3)
-	 *
-	 * total = total_l1->l2 + total_l2->l3;
-	 */
-	int total_l1_2 = gnet->get_num_hidden()*4*((gnet->get_num_input()+1)*2 + gnet->get_num_hidden());
-	int total_l2_3 = gnet->get_num_output()*4*((gnet->get_num_hidden()+1)*2 + gnet->get_num_output());
-	int total = (total_l1_2 + total_l2_3) * iterations;
-
-	std::cout << milliseconds << " ms" << std::endl;
-	std::cout << "Effective Bandwidth (GB/s): " << total/milliseconds/1e6 << std::endl << std::endl;
-	return milliseconds;
-}
-
-
 float Profiler::profile_feed_forward_v1_2(NetData &d) {
 	std::cout << "Profiling feed forward v1.2 over " << iterations << " iterations." << std::endl;
 
@@ -101,7 +69,6 @@ float Profiler::profile_feed_forward_v1_2(NetData &d) {
 
 	for (int i = 0; i < iterations; ++i) {
 		gnet->feed_forward_v1_2(dv[0]->input);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	}
 
 	cuda_stop();
@@ -114,36 +81,36 @@ float Profiler::profile_feed_forward_v1_2(NetData &d) {
 }
 
 
-float Profiler::profile_feed_forward_v2() {
-	std::cout << "Profiling feed forward v2 over " << iterations << " iterations." << std::endl;
-
-	cuda_start();
-
-	for (int i = 0; i < iterations; ++i) {
-		gnet->feed_forward_v2();
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	}
-
-	cuda_stop();
-
-	float milliseconds = 0;
-	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
-
-	std::cout << milliseconds << " ms" << std::endl;
-	return milliseconds;
+inline int
+pow2roundup (int x)
+{
+    if (x < 0)
+        return 0;
+    --x;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    return x+1;
 }
 
 float Profiler::profile_feed_forward_v2_2(NetData &d) {
-	std::cout << "Profiling feed forward v2_2 over " << iterations << " iterations." << std::endl;
+	std::cout << "Profiling feed forward v2.2 over " << iterations << " iterations." << std::endl;
 
 	FeatureVector **dv;
 	gnet->copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
 
+	float *d_sums;
+	unsigned int n = pow2roundup((net->n_input+1));
+	std::cout << "pow2 = " << n << std::endl;
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_sums, n*(net->n_hidden)*sizeof(float)));
+	CUDA_CHECK_RETURN(cudaMemset(d_sums, 0, n*(net->n_hidden)*sizeof(float)));
+
 	cuda_start();
 
 	for (int i = 0; i < iterations; ++i) {
-		gnet->feed_forward_v2_2(dv[0]->input);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+		gnet->feed_forward_v2_2(n, dv[0]->input, d_sums);
 	}
 
 	cuda_stop();
@@ -155,25 +122,6 @@ float Profiler::profile_feed_forward_v2_2(NetData &d) {
 	return milliseconds;
 }
 
-
-float Profiler::profile_backprop_v1() {
-	std::cout << "Profiling backprop v1 over " << iterations << " iterations." << std::endl;
-
-	cuda_start();
-
-	for (int i = 0; i < iterations; ++i) {
-		gnet->backprop_v1();
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	}
-
-	cuda_stop();
-
-	float milliseconds = 0;
-	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
-
-	std::cout << milliseconds << " ms" << std::endl;
-	return milliseconds;
-}
 
 float Profiler::profile_backprop_v2(NetData &d) {
 	std::cout << "Profiling backprop v2 over " << iterations << " iterations." << std::endl;
@@ -185,7 +133,6 @@ float Profiler::profile_backprop_v2(NetData &d) {
 
 	for (int i = 0; i < iterations; ++i) {
 		gnet->backprop_v2(dv[0]->input, dv[0]->target);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	}
 
 
@@ -204,7 +151,6 @@ float Profiler::profile_cpu_backprop(float *targets) {
 
 	for (int i = 0; i < iterations; ++i) {
 		nt->backprop(targets);
-		nt->update_weights();
 	}
 
 	stop = clock();

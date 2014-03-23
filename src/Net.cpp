@@ -162,7 +162,7 @@ float Net::get_random_range(float min, float max) {
  * http://stats.stackexchange.com/questions/47590/what-are-good-initial-weights-in-a-neural-network
  */
 void Net::init_weights() {
-	std::cout << "initializing weights\n";
+	std::cout << "Initializing CPU weights" << std::endl;
 	float rh = 1.0 / sqrt((float)Net::n_input);
 	float ro = 1.0 / sqrt((float)Net::n_hidden);
 

@@ -92,8 +92,8 @@ bool NetData::load_file(std::string fname) {
 		tset.set_size(data.size());
 
 		//print success
-		std::cout << "Data file: " << fname <<
-				"\nRead Complete: " << data.size() << " patterns loaded"  << std::endl;
+		std::cout << "Data file: " << fname << std::endl;
+		std::cout << "Read complete: " << data.size() << " patterns loaded"  << std::endl;
 
 		//close file
 		in.close();

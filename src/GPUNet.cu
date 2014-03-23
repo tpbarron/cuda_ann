@@ -101,16 +101,8 @@ __global__ void curand_setup_v2(int n, curandState *state) {
 
 /**
  * initialize nodes to 0 or 1 if bias
- * block(1), threads(n_nodes+1)
+ * generic
  */
-__global__ void init_nodes_layer(float *nodes) {
-	int i = threadIdx.x;
-	if (i == blockDim.x-1)
-		nodes[i] = 1;
-	else
-		nodes[i] = 0;
-}
-
 __global__ void init_nodes_layer_v2(int n, float *nodes) {
 	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
 	if (i < n) {
@@ -122,29 +114,14 @@ __global__ void init_nodes_layer_v2(int n, float *nodes) {
 }
 
 /**
- * block(1), threads(n_output)
  * set all output nodes to 0
  */
-__global__ void init_nodes_output(float *output) {
-	int i = threadIdx.x;
-	output[i] = 0;
-}
 
 __global__ void init_nodes_output_v2(int n, float *output) {
 	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
 	if (i < n) {
 		output[i] = 0;
 	}
-}
-
-//block(1), threads(n_layer1+1, n_layer2)
-__global__ void init_weights(float *weights, curandState *state) {
-	// r is the range for random values
-	float r = 1.0 / sqrt((float)blockDim.x-1);
-
-	int node_l1 = threadIdx.x;
-	int node_l2 = threadIdx.y;
-	weights[blockDim.y*node_l1 + node_l2] = get_random_range(-r, r, blockDim.y*node_l1 + node_l2, state);
 }
 
 
@@ -160,15 +137,6 @@ __global__ void init_weights_v2(int n1, int n2, float *weights, curandState *sta
 }
 
 
-
-// block(1), threads(n_layer1+1, n_layer2)
-__global__ void init_deltas(float *deltas) {
-	int node_l1 = threadIdx.x;
-	int node_l2 = threadIdx.y;
-
-	deltas[blockDim.y*node_l1 + node_l2] = 0;
-}
-
 __global__ void init_deltas_v2(int n1, int n2, float *deltas) {
 	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -182,11 +150,8 @@ __global__ void init_deltas_v2(int n1, int n2, float *deltas) {
 
 
 
-
-/*
- * --------------- Referencing and simple set function ---------------
+/* --------------- Referencing and simple set function ---------------
  * set bias
- * set input/target[ref]
  *
  */
 
@@ -203,19 +168,10 @@ __global__ void set_bias(int n_input, float *d_inp) {
  *
  */
 
-__device__ bool d_correct_result = true;
-
 __device__ int d_num_correct = 0;
 __device__ float d_acc = 0;
-// called with blocks = (1), threads = (n_output)
-// d_correct_result must be set to true before each call
-// d_correct_result is copied back to host afterwards
-__global__ void output_correct(float *output, float *target) {
-	int i = threadIdx.x;
-	if (d_correct_result && clamp(output[i]) != target[i]) {
-		d_correct_result = false;
-	}
-}
+__device__ float d_mse_sum = 0;
+__device__ float d_mse = 0; //current mse
 
 __global__ void output_correct_v2(float *output, float *target, int n_output) {
 	for (int i = 0; i < n_output; ++i) {
@@ -230,18 +186,6 @@ __global__ void calc_acc(int n_patterns) {
 	d_acc = ((float)d_num_correct/n_patterns * 100);
 	d_num_correct = 0;
 }
-
-__device__ float d_mse_sum = 0;
-__device__ float d_mse = 0; //current mse
-
-// called with blocks = (1), threads = (n_output)
-// d_mse_sum must be set to 0 before each call
-// d_mse_sum is copied back to host afterwards
-__global__ void mse_sum(float *output, float *target) {
-	int i = threadIdx.x;
-	d_mse_sum += pow((output[i] - target[i]), 2);
-}
-
 
 /**
  * single threaded
@@ -302,7 +246,6 @@ __global__ void feed_forward_layer_v1(int n_layer1, int n_layer2, float* layer1,
  */
 __global__ void feed_forward_layer_v1_2(int n_layer1, int n_layer2, float* layer1, float* layer2, float* weights) {
 	unsigned int n = blockIdx.x * blockDim.x+threadIdx.x; // node to compute;
-
 	if (n < n_layer2) {
 		float r = 0;
 		for (int i = 0; i <= n_layer1; ++i) { //include bias
@@ -313,50 +256,18 @@ __global__ void feed_forward_layer_v1_2(int n_layer1, int n_layer2, float* layer
 }
 
 
-/*
- * evoked with blocks(num nodes layer 2), threads(num nodes layer 1)
- *
- * sums holds the values of each term in the linear combination
- * n1t1, n1t2, ... n1tm, n2t1, n2t2, ... , n2tm, ...
- *
- *
- * bandwidth calculation:
- *
- * per thread,
- * 	bytes read: 4*2
- * 	bytes written: 4*1
- *
- * (n_input+1)*n_hidden threads
- *
- * Total: (n_input+1)*n_hidden*4*3
- */
-__global__ void feed_forward_layer_v2(int n_layer1, int n_layer2, float* layer1, float* layer2, float* weights, float* sums) {
-	int j = blockIdx.x; //the node in the next layer to compute
-	int i = threadIdx.x + threadIdx.y * blockDim.x; //0;//the term in the linear combination to compute
-
-	if (i > n_layer1) {
-		return;
-	}
-
-	sums[(n_layer1+1)*j+i] = layer1[i] * weights[n_layer2*i + j];
-}
-
-__global__ void feed_forward_layer_v2_2(int n_layer1, int n_layer2, float* layer1, float* layer2, float* weights, float* sums) {
-
-	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x; // input node
-
-	if (i <= n_layer1) {
+__global__ void feed_forward_layer_v2_2(unsigned int pow2, int n_layer1, int n_layer2, float* layer1, float* layer2, float* weights, float* sums) {
+	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x; // input node
+	//printf("x = %d\n", x);
+	if (x < (n_layer1+1)*n_layer2) {
+		//printf("x = %d\n", x);
+		int i = x % (n_layer1+1);
 		int j = i % n_layer2;
-		sums[(n_layer1+1)*j+i] = layer1[i] * weights[n_layer2*i + j];
+		int p = j*pow2 + i;
+		sums[p] = layer1[i] * weights[n_layer2*i + j];
 	}
-
 }
 
-
-__global__ void compute_activation(float* nodes, float *sums, int stride) {
-	int i = threadIdx.x;
-	nodes[i] = sigmoid(sums[i*stride]);
-}
 
 /*
  * generic version
@@ -370,50 +281,33 @@ __global__ void compute_activation_v2(float* nodes, float *sums, int n_layer, in
 
 
 /*
- * n_nodes is the number of nodes in the previous layer
- *
- * bandwidth calc:
- * 	bytes read: 4
- * 	bytes written: 4
- *
+ * Copied form NVIDIA presentation
+ * http://developer.download.nvidia.com/compute/cuda/1.1-Beta/x86_website/projects/reduction/doc/reduction.pdf
  */
-__global__ void reduction(int n_nodes_prev, int n_nodes_next, int itr, float* sums) {
-	//initialize dynamic shared memory for floor(n_nodes_prev/2.0)*n_nodes_next floats
 
-	//get index
-	int i = threadIdx.x;
-	int index = i + blockIdx.x * blockDim.x; // * n_nodes_prev
-	//if in correct term and not leftover
-	if ((i % (int)powf(2,itr)) == 0 && ((i+1) % n_nodes_prev) != 0) {
-		//printf("sums[%d] = %f, sums[%d+%d] = %f\n", i, sums[i], i, (int)powf(2, itr-1), sums[i+ (int)powf(2,itr-1)]);
-		sums[index] += sums[index + (int)powf(2,itr-1)];
-	}
-}
+template <unsigned int blockSize>
+__global__ void reduce_kernel(float *g_idata, float *g_odata, unsigned int n, int offset) {
+	g_idata = &(g_idata[n*offset]);
 
-/*
- * Shared memory reduction, handles threads more efficiently.
- */
-__global__ void split_reduce(int n, int offset, float *g_idata, float *g_odata) {
+	__syncthreads();
 	extern __shared__ float sdata[];
-
 	unsigned int tid = threadIdx.x;
-	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x + offset;
-
-	if (i < n + offset) { // if in our range of data
-		//printf("i = %d\n", i);
-		sdata[tid] = g_idata[i];
-		__syncthreads();
-
-		for (unsigned int s = 1; s < blockDim.x; s *= 2) {
-			int index = 2 * s * tid;
-			if (index < blockDim.x && (index + s) < n) {
-				//printf("sdata[%d] = %f,  sdata[%d] = %f\n", index, sdata[index], index+s, sdata[index+s]);
-				sdata[index] += sdata[index + s];
-			}
-			__syncthreads();
-		}
-		if (tid == 0) g_odata[blockIdx.x+offset] = sdata[0];
+	unsigned int i = blockIdx.x*(blockSize*2) + tid;
+	unsigned int gridSize = blockSize*2*gridDim.x;
+	sdata[tid] = 0;
+	while (i < n) { sdata[tid] += g_idata[i] + g_idata[i+blockSize]; i += gridSize; }
+	__syncthreads();
+	if (blockSize >= 512) { if (tid < 256) { sdata[tid] += sdata[tid + 256]; } __syncthreads(); }
+	if (blockSize >= 256) {if (tid < 128) { sdata[tid] += sdata[tid + 128]; } __syncthreads(); }
+	if (blockSize >= 128) {if (tid < 64) { sdata[tid] += sdata[tid + 64]; } __syncthreads(); }
+	if (tid < 32) { if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
+		if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
+		if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
+		if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
+		if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
+		if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
 	}
+	if (tid == 0) g_odata[blockIdx.x] = sdata[0];
 }
 
 
@@ -923,7 +817,7 @@ void GPUNet::alloc_dev_mem() {
 	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_out_err_gradients, (n_output+1)*sizeof(float)));
 	add_gpu_mem((n_hidden + n_output + 2)*sizeof(float));
 
-	std::cout << "Memory allocated on device." << std::endl;
+	std::cout << "Memory allocated on device" << std::endl;
 }
 
 /*
@@ -932,6 +826,8 @@ void GPUNet::alloc_dev_mem() {
  * I can have identical networks.
  */
 void GPUNet::init_from_net(Net &net, NetData &d) {
+	int threads = 128;
+
 	//copy first pattern to input neurons so it is copied to device, instead of zeros
 	for (int i = 0; i < net.n_input; ++i) {
 		net.inputNeurons[i] = d.get_training_dataset()->training_set[0]->input[i];
@@ -948,13 +844,10 @@ void GPUNet::init_from_net(Net &net, NetData &d) {
 	CUDA_CHECK_RETURN(cudaMemcpy(d_ih_weights, net.wInputHidden, (net.n_input+1)*(net.n_hidden)*sizeof(float), cudaMemcpyHostToDevice));
 	CUDA_CHECK_RETURN(cudaMemcpy(d_ho_weights, net.wHiddenOutput, (net.n_hidden+1)*(net.n_output)*sizeof(float), cudaMemcpyHostToDevice));
 
-	//init deltas to 0
-	dim3 ih_threads(n_input+1, n_hidden);
-	dim3 ho_threads(n_hidden+1, n_output);
-	init_deltas<<<1, ih_threads>>>(d_ih_deltas);
-	init_deltas<<<1, ho_threads>>>(d_ho_deltas);
+	init_deltas_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(n_input+1, n_hidden, d_ih_deltas);
+	init_deltas_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>(n_hidden+1, n_output, d_ho_deltas);
 
-	std::cout << "data copied to device\n\n";
+	std::cout << "Data copied to device" << std::endl << std::endl;
 }
 
 
@@ -976,8 +869,7 @@ void GPUNet::init_net() {
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
 	dim3 ih_threads(n_input+1, n_hidden);
-	init_weights<<<1, ih_threads>>>(d_ih_weights, state);
-	//init_weights_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(n_input+1, n_hidden, d_ih_weights, state);
+	init_weights_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(n_input+1, n_hidden, d_ih_weights, state);
 	CUDA_CHECK_RETURN(cudaFree(state));
 
 	CUDA_CHECK_RETURN(cudaMalloc(&state, (n_hidden+1)*n_output*sizeof(curandState)));
@@ -985,15 +877,12 @@ void GPUNet::init_net() {
 	//curand_setup_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>((n_hidden+1)*n_output, state);
 
 	dim3 ho_threads(n_hidden+1, n_output);
-	init_weights<<<1, ho_threads>>>(d_ho_weights, state);
-	//init_weights_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>(n_hidden+1, n_output, d_ho_weights, state);
+	init_weights_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>(n_hidden+1, n_output, d_ho_weights, state);
 	CUDA_CHECK_RETURN(cudaFree(state));
 
 	//init deltas to 0
-	init_deltas<<<1, ih_threads>>>(d_ih_deltas);
-	//init_deltas_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(n_input+1, n_hidden, d_ih_deltas);
-	init_deltas<<<1, ho_threads>>>(d_ho_deltas);
-	//init_deltas_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>(n_hidden+1, n_output, d_ho_deltas);
+	init_deltas_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(n_input+1, n_hidden, d_ih_deltas);
+	init_deltas_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>(n_hidden+1, n_output, d_ho_deltas);
 
 	std::cout << "net initialized" << std::endl;
 }
@@ -1103,25 +992,19 @@ int GPUNet::get_num_output() {
 	return n_output;
 }
 
-int GPUNet::num_patterns_copyable(TrainingDataSet *tset) {
-	//num patterns = integer div of available memory / mem for single pattern
-	int bytes_per_pattern = sizeof(float)*((n_input+1)+(n_output));
-	int cur_dev = get_current_device();
-	int available_mem = total_dev_mem(cur_dev) - current_mem_usage(cur_dev);
-	return available_mem / bytes_per_pattern;
-}
 
 void GPUNet::calc_dataset_parameters(TrainingDataSet *tset) {
+	std::cout << "Determining data set statistics" << std::endl;
 	// calc num patterns copyable
 	// num patterns = integer div of available memory / mem for single pattern
 	int bytes_per_pattern = sizeof(float)*((n_input+1)+(n_output));
 	int cur_dev = get_current_device();
-	std::cout << "bytes per pattern="<<bytes_per_pattern<<std::endl;
-	std::cout << "total dev mem="<< total_dev_mem(cur_dev)<<std::endl;
-	std::cout << "current mem usage="<< current_mem_usage(cur_dev)<<std::endl;
+	std::cout << " bytes per pattern = "<<bytes_per_pattern<<std::endl;
+	std::cout << " total dev mem = "<< total_dev_mem(cur_dev)<<std::endl;
+	std::cout << " current mem usage = "<< current_mem_usage(cur_dev)<<std::endl;
 	int available_mem = total_dev_mem(cur_dev) - current_mem_usage(cur_dev);
-	std::cout << "available mem="<<available_mem<<std::endl;
-	std::cout << "tset.size="<<tset->size()<<std::endl;
+	std::cout << " available mem = "<<available_mem<<std::endl;
+	std::cout << " tset.size = "<<tset->size()<<std::endl;
 	n_copyable_patterns = available_mem / bytes_per_pattern;
 	if (n_copyable_patterns > tset->size()) {
 		n_copyable_patterns = tset->size();
@@ -1129,102 +1012,25 @@ void GPUNet::calc_dataset_parameters(TrainingDataSet *tset) {
 	// calc num sections
 	// num_sections = ceil ( n_patterns / n_copyable_patterns)
 	n_sections = (tset->size() + n_copyable_patterns - 1) / n_copyable_patterns;
-
-	std::cout << "n_copyable_patterns="<<n_copyable_patterns<<", n_sections="<<n_sections<<std::endl;
-}
-
-void GPUNet::train_net(TrainingDataSet *tset) {
-	std::cout << std::endl << "Neural Network Training Starting: " << std::endl
-			<< "----------------------------------------------------" << std::endl
-			<< "LR: " << l_rate << ", Momentum: " << momentum << ", Max Epochs: " << max_epochs << std::endl
-			<< n_input << " Input Neurons, " << n_hidden << " Hidden Neurons, " << n_output << " Output Neurons" << std::endl
-			<< "----------------------------------------------------" << std::endl << std::endl;
-
-	FeatureVector** d_training_set;
-	FeatureVector** d_generalization_set;
-	FeatureVector** d_validation_set;
-	if (num_patterns_copyable(tset) >= tset->size()) {
-		//copy all patterns
-		start = clock();
-		copy_to_device_host_array_ptrs_biased(tset->training_set, &d_training_set);
-		copy_to_device_host_array_ptrs_biased(tset->generalization_set, &d_generalization_set);
-		copy_to_device_host_array_ptrs_biased(tset->validation_set, &d_validation_set);
-		finish = clock();
-		std::cout << "Copying entire dataset to device: " << ((float)finish-start)/CLOCKS_PER_SEC << std::endl;
-	} else {
-		//TODO: what do I do?
-		// Copy as many as possible
-		//
-		// Should this be done in a separate thread
-	}
-
-	epoch = 0;
-	//train network using training dataset for training and generalization dataset for testing
-	//while ((trainingSetAccuracy < desired_acc) && epoch < max_epochs) {
-	while (epoch < max_epochs) {
-		//store previous accuracy
-		//float previousTAccuracy = trainingSetAccuracy;
-		//float previousGAccuracy = generalizationSetAccuracy;
-
-		//use training set to train network
-		//run_training_epoch(tset->training_set);
-		//std::cout << "Calling run_training_epoch_dev" << std::endl;
-		run_training_epoch_dev(d_training_set, tset->training_set.size());
-
-
-		//get generalization set accuracy and MSE
-		//get_set_accuracy_mse(tset->generalization_set, &generalizationSetAccuracy, &generalizationSetMSE);
-		//get_set_accuracy_mse_dev(d_generalization_set, tset->generalization_set.size(), &generalizationSetAccuracy, &generalizationSetMSE);
-
-		//print out change in training /generalization accuracy (only if a change is greater than a percent)
-		//if (ceil(previousTAccuracy) != ceil(trainingSetAccuracy) || ceil(previousGAccuracy) != ceil(generalizationSetAccuracy)) {
-			std::cout << "Epoch: " << epoch << std::endl;
-			//std::cout << "; Test Set Acc:" << trainingSetAccuracy << "%, MSE: " << trainingSetMSE;
-			//std::cout << ";\tGSet Acc:" << generalizationSetAccuracy << "%, MSE: " << generalizationSetMSE << std::endl;
-		//}
-
-
-		//previousTAccuracy = trainingSetAccuracy;
-		//previousGAccuracy = generalizationSetAccuracy;
-
-		//once training set is complete increment epoch
-		++epoch;
-	}
-
-	//get validation set accuracy and MSE
-	//get_set_accuracy_mse(tset->validation_set, &validationSetAccuracy, &validationSetMSE);
-	//get_set_accuracy_mse_dev(d_validation_set, tset->validation_set.size(), &validationSetAccuracy, &validationSetMSE);
-
-	//out validation accuracy and MSE
-	std::cout << std::endl << "Training Complete. Elapsed Epochs: " << epoch << std::endl;
-	//std::cout << "\tValidation Set Accuracy: " << validationSetAccuracy << std::endl;
-	//std::cout << "\tValidation Set MSE: " << validationSetMSE << std::endl << std::endl;
-
-	//free training set
-	for (int i = 0; i < tset->training_set.size(); ++i) {
-		CUDA_CHECK_RETURN(cudaFree(d_training_set[i]->input));
-		CUDA_CHECK_RETURN(cudaFree(d_training_set[i]->target));
-		free(d_training_set[i]);
-	}
-	free(d_training_set);
+	std::cout << " n_copyable_patterns = "<<n_copyable_patterns<<", n_sections = "<<n_sections<<std::endl<<std::endl;
 }
 
 
 
 void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
+	calc_dataset_parameters(tset);
+
 	std::cout << std::endl << "Neural Network Training Starting: " << std::endl
 			<< "----------------------------------------------------" << std::endl
 			<< "LR: " << l_rate << ", Momentum: " << momentum << ", Max Epochs: " << max_epochs << std::endl
 			<< n_input << " Input Neurons, " << n_hidden << " Hidden Neurons, " << n_output << " Output Neurons" << std::endl
 			<< "----------------------------------------------------" << std::endl << std::endl;
 
-	calc_dataset_parameters(tset);
 	epoch = 0;
 	FeatureVector** d_training_set;
 
 	if (n_sections == 1) { // no section copying necessary
 		copy_to_device_host_array_ptrs_biased(tset->training_set, &d_training_set);
-		std::cout << "data copied" << std::endl;
 		while (epoch < max_epochs) {
 			run_training_epoch_dev(d_training_set, tset->training_set.size());
 			std::cout << "Epoch: " << epoch << std::endl;
@@ -1251,7 +1057,7 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 	}
 
 	//out validation accuracy and MSE
-	std::cout << std::endl << "Training Complete. Elapsed Epochs: " << epoch << std::endl;
+	std::cout << std::endl << "Training complete. Elapsed epochs: " << epoch << std::endl;
 
 	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&trainingSetMSE, d_mse, sizeof(float), 0, cudaMemcpyDeviceToHost));
 	std::cout << "MSE = " << trainingSetMSE << std::endl;
@@ -1267,108 +1073,6 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 	free(d_training_set);
 }
 
-void GPUNet::get_set_accuracy_mse(thrust::host_vector<FeatureVector*> set, float* s_acc, float* s_mse) {
-	int incorrect_patterns = 0;
-	float mse = 0, mse_tmp = 0;
-	bool correct_result = true;
-
-	//TODO: copy multiple patters at once so bandwidth is not a limiting factor
-	for (unsigned int i = 0; i < set.size(); ++i) {
-		mse_tmp = 0;
-		correct_result = true;
-
-		//copy pattern to input
-		CUDA_CHECK_RETURN(cudaMemcpy(d_input, set[i]->input, (n_input+1)*sizeof(float), cudaMemcpyHostToDevice));
-
-		//copy target to dev
-		CUDA_CHECK_RETURN(cudaMemcpy(d_target, set[i]->target, (n_output)*sizeof(float), cudaMemcpyHostToDevice));
-
-		//feed forward input
-		feed_forward_v1();
-
-		CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_correct_result, &correct_result, sizeof(correct_result), 0, cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_mse_sum, &mse_tmp, sizeof(mse_tmp), 0, cudaMemcpyHostToDevice));
-		output_correct<<<1, n_output>>>(d_output, d_target);
-		mse_sum<<<1, n_output>>>(d_output, d_target);
-		CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&correct_result, d_correct_result, sizeof(correct_result), 0, cudaMemcpyDeviceToHost));
-		CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse_tmp, d_mse_sum, sizeof(mse_tmp), 0, cudaMemcpyDeviceToHost));
-		if (!correct_result)
-			++incorrect_patterns;
-		mse += mse_tmp;
-	}
-
-	*s_acc = 100 - ((float)incorrect_patterns/set.size() * 100);
-	*s_mse = mse / (n_output * set.size());
-}
-
-void GPUNet::run_training_epoch(thrust::host_vector<FeatureVector*> feature_vecs) {
-	print_net();
-	int incorrect_patterns = 0;
-	float mse = 0, mse_tmp = 0;
-	bool correct_result = true;
-
-	for (unsigned int i = 0; i < feature_vecs.size(); ++i) {
-		mse_tmp = 0;
-		correct_result = true;
-
-		//copy pattern to input
-		CUDA_CHECK_RETURN(cudaMemcpy(d_input, feature_vecs[i]->input, (n_input+1)*sizeof(float), cudaMemcpyHostToDevice));
-
-		//copy target to dev
-		CUDA_CHECK_RETURN(cudaMemcpy(d_target, feature_vecs[i]->target, (n_output)*sizeof(float), cudaMemcpyHostToDevice));
-
-		//feed forward input
-		feed_forward_v1();
-
-		CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_correct_result, &correct_result, sizeof(correct_result), 0, cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_mse_sum, &mse_tmp, sizeof(mse_tmp), 0, cudaMemcpyHostToDevice));
-		output_correct<<<1, n_output>>>(d_output, d_target);
-		mse_sum<<<1, n_output>>>(d_output, d_target);
-		CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&correct_result, d_correct_result, sizeof(correct_result), 0, cudaMemcpyDeviceToHost));
-		CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse_tmp, d_mse_sum, sizeof(mse_tmp), 0, cudaMemcpyDeviceToHost));
-		if (!correct_result)
-			++incorrect_patterns;
-		mse += mse_tmp;
-
-		//std::cout << "Correct result: " << correct_result << ", mse_tmp: " << mse_tmp << std::endl;
-		//backprop target
-		backprop_v1();
-	}
-
-	//std::cout << "MSE sum: " << mse << std::endl;
-	//std::cout << "inc patterns: " << incorrect_patterns << std::endl;
-	//update training accuracy and MSE
-	trainingSetAccuracy = 100 - ((float)incorrect_patterns/feature_vecs.size() * 100);
-	trainingSetMSE = mse / (n_output * feature_vecs.size());
-}
-
-void GPUNet::get_set_accuracy_mse_dev(FeatureVector **feature_vecs, size_t n_features, float* s_acc, float* s_mse) {
-	int incorrect_patterns = 0;
-	float mse = 0, mse_tmp = 0;
-	bool correct_result = true;
-
-	//TODO: copy multiple patters at once so bandwidth is not a limiting factor
-	for (unsigned int i = 0; i < n_features; ++i) {
-		mse_tmp = 0;
-		correct_result = true;
-
-		//feed forward input
-		feed_forward_v1_2(feature_vecs[i]->input);
-
-		CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_correct_result, &correct_result, sizeof(correct_result), 0, cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_mse_sum, &mse_tmp, sizeof(mse_tmp), 0, cudaMemcpyHostToDevice));
-		output_correct<<<1, n_output>>>(d_output, feature_vecs[i]->target);
-		mse_sum<<<1, n_output>>>(d_output, feature_vecs[i]->target);
-		CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&correct_result, d_correct_result, sizeof(correct_result), 0, cudaMemcpyDeviceToHost));
-		CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse_tmp, d_mse_sum, sizeof(mse_tmp), 0, cudaMemcpyDeviceToHost));
-		if (!correct_result)
-			++incorrect_patterns;
-		mse += mse_tmp;
-	}
-
-	*s_acc = 100 - ((float)incorrect_patterns/n_features * 100);
-	*s_mse = mse / (n_output * n_features);
-}
 
 void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features) {
 	for (size_t i = 0; i < n_features; ++i) {
@@ -1383,90 +1087,6 @@ void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_featu
 	//CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse, d_mse, sizeof(float), 0, cudaMemcpyDeviceToHost));
 	//std::cout << "Current mse = " << mse << std::endl;
 }
-
-/*
- * Reduce sums from len to n sums. Assumes len is a multiple of n.
- */
-float* GPUNet::reduce(int n, int len, float* d_sums, float *d_y) {
-	int step = len / n;
-
-	float *res;
-	for (int i = n-1; i >= 0; --i) {
-		res = execute_split_reduction(step, i*step, d_sums, d_y);
-	}
-	return res;
-}
-
-/*
- * n is number of elements to sum
- * offset is where to start in the list
- * d_x is original list
- */
-float* GPUNet::execute_split_reduction(int n, int offset, float *d_x, float *d_y) {
-	bool result_in_y = false;
-	int threads = 128;
-	int blocks = (n+threads-1);
-
-	if (n >= threads) {
-		do {
-			blocks /= threads;
-			if (result_in_y)
-				split_reduce<<<blocks, threads, threads*sizeof(float)>>>(n, offset, d_y, d_x);
-			else
-				split_reduce<<<blocks, threads, threads*sizeof(float)>>>(n, offset, d_x, d_y);
-			result_in_y = !result_in_y;
-			CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-		} while (blocks/threads >= threads);
-		if (result_in_y)
-			//reduce0<<<1, threads, threads*sizeof(float)>>>(blocks, d_y, d_x);
-			split_reduce<<<1, blocks, blocks*sizeof(float)>>>(n, offset, d_y, d_x);
-		else
-			//reduce0<<<1, threads, threads*sizeof(float)>>>(blocks, d_x, d_y);
-			split_reduce<<<1, blocks, blocks*sizeof(float)>>>(n, offset, d_x, d_y);
-		result_in_y = !result_in_y;
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	} else {
-		split_reduce<<<1, n, n*sizeof(float)>>>(n, offset, d_x, d_y);
-		result_in_y = !result_in_y;
-	}
-
-	if (result_in_y) {
-		return d_y;
-	} else {
-		return d_x;
-	}
-}
-
-
-
-void GPUNet::backprop_v1() {
-	output_error_gradients<<<1, n_output>>>(d_output, d_target, d_out_err_gradients);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-	/*
-	 * called with threads = (nh+1, no, 1)
-	 */
-	dim3 hid_out_deltas(n_hidden+1, n_output);
-	update_hidden_output_deltas<<<1, hid_out_deltas>>>(n_output, l_rate, momentum, d_hidden, d_out_err_gradients, d_ho_deltas);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-	/*
-	 * called with threads = (nh)
-	 */
-	hidden_error_gradients<<<1, n_hidden>>>(n_output, d_hidden, d_ho_weights,
-			d_hid_err_gradients, d_out_err_gradients);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-	update_weights_ho<<<n_output, n_hidden+1>>>(n_output, d_ho_weights, d_ho_deltas);
-
-	dim3 in_hid_deltas(n_input+1, n_hidden);
-	update_input_hidden_deltas<<<1, in_hid_deltas>>>(n_hidden, l_rate, momentum,
-			d_input, d_hid_err_gradients, d_ih_deltas);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-	update_weights_ih<<<n_hidden, n_input+1>>>(n_hidden, d_ih_weights, d_ih_deltas);
-}
-
 
 
 void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
@@ -1502,16 +1122,6 @@ void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
 	update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas);
 }
 
-void GPUNet::feed_forward_v1() {
-	feed_forward_layer_v1<<<1, n_hidden>>>(n_input, n_hidden, d_input, d_hidden, d_ih_weights);
-	// must finish previous layer before computing next
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-	feed_forward_layer_v1<<<1, n_output>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-
-	//sync before measuring time
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-}
 
 void GPUNet::feed_forward_v1_2(float *d_inp) {
 	int threads = 128;
@@ -1520,88 +1130,38 @@ void GPUNet::feed_forward_v1_2(float *d_inp) {
 }
 
 
-void GPUNet::feed_forward_v2() {
-	dim3 gridm2l1(n_hidden);
-	dim3 threadsm2l1 = get_threadsm2l1();
-	//std::cout << "threads layer 1: (" << threadsm2l1.x << " " << threadsm2l1.y << " " << threadsm2l1.z << ")" << std::endl;
 
-	//float *a = new float[(n_input+1)*n_hidden];
-	float* d_sums_l1, *d_y;
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_sums_l1, (n_input+1)*n_hidden*sizeof(float)));
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_y, (n_input+1)*n_hidden*sizeof(float)));
-
-	feed_forward_layer_v2<<<gridm2l1, threadsm2l1>>>(n_input, n_hidden, d_input, d_hidden, d_ih_weights, d_sums_l1);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-	d_sums_l1 = reduce(n_hidden, (n_input+1)*n_hidden, d_sums_l1, d_y);
-
-	compute_activation<<<1, n_hidden>>>(d_hidden, d_sums_l1, n_input+1);
-
-	// must finish previous layer before computing next
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	CUDA_CHECK_RETURN(cudaFree(d_sums_l1));
-	//GPUNet::add_gpu_mem(-(n_input+1)*n_hidden*sizeof(float));
-
-	//grid size must be >= # nodes in next layer
-	dim3 gridm2l2(n_output);
-	//1 thread per grid
-	dim3 threadsm2l2 = get_threadsm2l2();
-	//std::cout << "threads layer 2: (" << threadsm2l2.x << " " << threadsm2l2.y << " " << threadsm2l2.z << ")" << std::endl;
-
-	float *d_sums_l2;
-	CUDA_CHECK_RETURN(cudaMalloc(&d_sums_l2, n_hidden*n_output*sizeof(float)));
-	CUDA_CHECK_RETURN(cudaMemset(d_y, 0, (n_input+1)*n_hidden*sizeof(float)));
-	//GPUNet::add_gpu_mem((n_hidden+1)*n_output*sizeof(float));
-
-	feed_forward_layer_v2<<<gridm2l2, threadsm2l2>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights, d_sums_l2);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-	d_sums_l2 = reduce(n_output, (n_hidden+1)*n_output, d_sums_l2, d_y);
-
-	compute_activation<<<1, n_output>>>(d_output, d_sums_l2, n_hidden+1);
-
-	//sync before measuring time
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	CUDA_CHECK_RETURN(cudaFree(d_sums_l2));
-	CUDA_CHECK_RETURN(cudaFree(d_y));
-	//GPUNet::add_gpu_mem(-(n_hidden+1)*n_output*sizeof(float));
-}
-
-void GPUNet::feed_forward_v2_2(float *d_inp) {
+void GPUNet::feed_forward_v2_2(unsigned int pow2, float *d_inp, float *d_sums) {
 	int threads = 128;
+	feed_forward_layer_v2_2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(pow2, n_input, n_hidden, d_inp, d_hidden, d_ih_weights, d_sums);
 
-	float* d_sums_l1, *d_y;
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_sums_l1, (n_input+1)*n_hidden*sizeof(float)));
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_y, (n_input+1)*n_hidden*sizeof(float)));
 
-	feed_forward_layer_v2_2<<<(n_input+threads-1)/threads, threads>>>(n_input, n_hidden, d_inp, d_hidden, d_ih_weights, d_sums_l1);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+	float *h_sums, *h_tmp;
+	h_sums = (float*)malloc(pow2*(n_hidden)*sizeof(float));
+	memset(h_sums, 0, pow2*(n_hidden)*sizeof(float));
+	h_tmp = (float*)malloc(pow2*sizeof(float));
+	memset(h_tmp, 0, pow2*sizeof(float));
 
-	d_sums_l1 = reduce(n_hidden, (n_input+1)*n_hidden, d_sums_l1, d_y);
+	CUDA_CHECK_RETURN(cudaMemcpy(h_sums, d_sums, pow2*(n_hidden)*sizeof(float), cudaMemcpyDeviceToHost));
+	for (int i = 0; i < pow2*(n_hidden); ++i) {
+		std::cout << h_sums[i] << " ";
+	}
+	std::cout << std::endl;
 
-	compute_activation_v2<<<(n_hidden+threads-1)/n_hidden, threads>>>(d_hidden, d_sums_l1, n_hidden, n_input+1);
+	float *d_tmp;
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_tmp, pow2*sizeof(float)));
+	CUDA_CHECK_RETURN(cudaMemset(d_tmp, 0, pow2*sizeof(float)));
+	//reduce_kernel<128><<<(pow2+threads-1)/threads, threads, threads*sizeof(float)>>>(d_sums, d_tmp, pow2, 0);
 
-	// must finish previous layer before computing next
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	CUDA_CHECK_RETURN(cudaFree(d_sums_l1));
-	//GPUNet::add_gpu_mem(-(n_input+1)*n_hidden*sizeof(float));
+	reduce_kernel<128><<<(pow2+threads-1)/threads, threads, threads*sizeof(float)>>>(d_sums, d_tmp, pow2, 1);
 
-	float *d_sums_l2;
-	CUDA_CHECK_RETURN(cudaMalloc(&d_sums_l2, n_hidden*n_output*sizeof(float)));
-	CUDA_CHECK_RETURN(cudaMemset(d_y, 0, n_input*n_hidden*sizeof(float)));
-	//GPUNet::add_gpu_mem((n_hidden+1)*n_output*sizeof(float));
+	CUDA_CHECK_RETURN(cudaMemcpy(h_tmp, d_tmp, pow2*sizeof(float), cudaMemcpyDeviceToHost));
+	for (int i = 0; i < pow2; ++i) {
+		std::cout << h_tmp[i] << " ";
+	}
+	std::cout << std::endl;
 
-	feed_forward_layer_v2_2<<<(n_hidden+threads-1)/threads, threads>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights, d_sums_l2);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-	d_sums_l2 = reduce(n_output, (n_hidden+1)*n_output, d_sums_l2, d_y);
-	compute_activation_v2<<<(n_output+threads-1)/n_output, threads>>>(d_output, d_sums_l2, n_output, n_hidden+1);
-
-	//sync before measuring time
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	CUDA_CHECK_RETURN(cudaFree(d_sums_l2));
-	CUDA_CHECK_RETURN(cudaFree(d_y));
-	//GPUNet::add_gpu_mem(-(n_hidden+1)*n_output*sizeof(float));
+	//compute_activation_v2<<<(n_hidden+threads-1)/n_hidden, threads>>>(d_hidden, d_sums_l1, n_hidden, n_input+1);
 }
 
 bool GPUNet::validate_output(float* desired_output) {
@@ -1645,13 +1205,6 @@ void GPUNet::test_feed_forward(Net &net, NetData &d) {
 	finish = clock();
 	std::cout << "feed forward CPU time: " << ((float)(finish-start)) / CLOCKS_PER_SEC << "s\n\n";
 	//net.print_network();
-
-	std::cout << "Testing method 1" << std::endl;
-	feed_forward_v1();
-	std::cout << "Validates: " << validate_output(net.outputNeurons) << "\n";
-	CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));
-
-	//print_net();
 
 	std::cout << "Testing method 1.2" << std::endl;
 	FeatureVector **dv;
@@ -1749,132 +1302,6 @@ void GPUNet::run_parallel(Net &net, NetData &d) {
 }
 
 
-void GPUNet::test_reduction() {
-	/*
-	 * Testing with 4, easy since power of 2
-	 */
-
-	std::cout << std::endl << "Reduce array length 4" << std::endl;
-
-	float a[] = {.25, .5, .75, 1};
-	float *d_a;
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_a, 4*sizeof(float)));
-	CUDA_CHECK_RETURN(cudaMemcpy(d_a, &a, 4*sizeof(float), cudaMemcpyHostToDevice));
-	reduction<<<1, 4>>>(4, 0, 1, d_a);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	CUDA_CHECK_RETURN(cudaMemcpy(&a, d_a, 4*sizeof(float), cudaMemcpyDeviceToHost));
-	for (int i = 0; i < 4; ++i) {
-		std::cout << a[i] << " ";
-	}
-	std::cout << std::endl;
-
-	reduction<<<1, 4>>>(4, 0, 2, d_a);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	CUDA_CHECK_RETURN(cudaMemcpy(&a, d_a, 4*sizeof(float), cudaMemcpyDeviceToHost));
-	for (int i = 0; i < 4; ++i) {
-		std::cout << a[i] << " ";
-	}
-	std::cout << std::endl;
-	cudaFree(d_a);
-
-	/*
-	 * Testing array size 5
-	 */
-
-	std::cout << std::endl << "Reduce array length 5" << std::endl;
-
-	float b[] = {.25, .5, .75, 1, 1.25};
-	float *d_b;
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_b, 5*sizeof(float)));
-	CUDA_CHECK_RETURN(cudaMemcpy(d_b, &b, 5*sizeof(float), cudaMemcpyHostToDevice));
-	reduction<<<1, 5>>>(5, 0, 1, d_b);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	CUDA_CHECK_RETURN(cudaMemcpy(&b, d_b, 5*sizeof(float), cudaMemcpyDeviceToHost));
-	for (int i = 0; i < 5; ++i) {
-		std::cout << b[i] << " ";
-	}
-	std::cout << std::endl;
-
-	reduction<<<1, 5>>>(5, 0, 2, d_b);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	CUDA_CHECK_RETURN(cudaMemcpy(&b, d_b, 5*sizeof(float), cudaMemcpyDeviceToHost));
-	for (int i = 0; i < 5; ++i) {
-		std::cout << b[i] << " ";
-	}
-	std::cout << std::endl;
-
-	reduction<<<1, 5>>>(5, 0, 3, d_b);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	CUDA_CHECK_RETURN(cudaMemcpy(&b, d_b, 5*sizeof(float), cudaMemcpyDeviceToHost));
-	for (int i = 0; i < 5; ++i) {
-		std::cout << b[i] << " ";
-	}
-	std::cout << std::endl;
-
-	cudaFree(d_b);
-
-
-	/*
-	 * Testing array size 7
-	 */
-	std::cout << std::endl << "Reduce array length 7" << std::endl;
-
-	float c[] = {.25, .5, .75, 1, 1.25, 1.5, 1.75};
-	float *d_c;
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_c, 7*sizeof(float)));
-	CUDA_CHECK_RETURN(cudaMemcpy(d_c, &c, 7*sizeof(float), cudaMemcpyHostToDevice));
-
-	for (int j = 0; j < ceil(log2(7.0)); ++j) {
-		reduction<<<1, 7>>>(7, 0, j+1, d_c);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-		CUDA_CHECK_RETURN(cudaMemcpy(&c, d_c, 7*sizeof(float), cudaMemcpyDeviceToHost));
-		for (int i = 0; i < 7; ++i) {
-			std::cout << c[i] << " ";
-		}
-		std::cout << std::endl;
-	}
-	cudaFree(d_c);
-
-	/*
-	 * testing stacked arrays
-	 */
-	std::cout << std::endl << "testing stacked arrays 4x4" << std::endl;
-	float d[] = {.25, .5, .75, 1, .1, .2, .3, .4, .2, .4, .6, .8, .3, .6, .9, 1.2};
-	float *d_d;
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_d, 16*sizeof(float)));
-	CUDA_CHECK_RETURN(cudaMemcpy(d_d, &d, 16*sizeof(float), cudaMemcpyHostToDevice));
-	for (int j = 0; j < ceil(log2(4.0)); ++j) {
-		reduction<<<4, 4>>>(4, 4, j+1, d_d);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-		CUDA_CHECK_RETURN(cudaMemcpy(&d, d_d, 16*sizeof(float), cudaMemcpyDeviceToHost));
-		for (int i = 0; i < 16; ++i) {
-			std::cout << d[i] << " ";
-		}
-		std::cout << std::endl;
-	}
-	cudaFree(d_d);
-
-
-	/*
-	 * testing stacked arrays
-	 */
-	std::cout << std::endl << "testing stacked arrays 4x5" << std::endl;
-	float e[] = {.25, .5, .75, 1, 1.25, .1, .2, .3, .4, .5, .2, .4, .6, .8, 1, .3, .6, .9, 1.2, 1.5};
-	float *d_e;
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_e, 20*sizeof(float)));
-	CUDA_CHECK_RETURN(cudaMemcpy(d_e, &e, 20*sizeof(float), cudaMemcpyHostToDevice));
-	for (int j = 0; j < ceil(log2(5.0)); ++j) {
-		reduction<<<4, 5>>>(5, 4, j+1, d_e);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-		CUDA_CHECK_RETURN(cudaMemcpy(&e, d_e, 20*sizeof(float), cudaMemcpyDeviceToHost));
-		for (int i = 0; i < 20; ++i) {
-			std::cout << e[i] << " ";
-		}
-		std::cout << std::endl;
-	}
-	cudaFree(d_e);
-}
-
 
 size_t GPUNet::current_mem_usage(int dev) {
 	return gpu_mem[dev];
@@ -1934,213 +1361,12 @@ size_t GPUNet::total_dev_mem(int dev) {
 }
 
 
-/*
- * Copies the host vector to a pointer array on the device
- * Cannot index from host
- */
-void GPUNet::copy_to_device(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv) {
-
-	CUDA_CHECK_RETURN(cudaMalloc((void **)&(*dv), hv.size()*sizeof(FeatureVector*)));
-
-	FeatureVector** host_dv_tmp = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
-
-	for (size_t i = 0; i < hv.size(); ++i) {
-		//allocate device memory
-		FeatureVector *d_fv;
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_fv, sizeof(FeatureVector)));
-
-		float *d_inp, *d_tar;
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_inp, (n_input)*sizeof(float)));
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_tar, (n_output)*sizeof(float)));
-
-		CUDA_CHECK_RETURN(cudaMemcpy(&(d_fv->input), &d_inp, sizeof(float *), cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpy(d_inp, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
-
-		CUDA_CHECK_RETURN(cudaMemcpy(&(d_fv->target), &d_tar, sizeof(float *), cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpy(d_tar, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
-
-		for(int a = 0; a < n_input; a++) {
-			std::cout << a << ": " << hv[i]->input[a] << std::endl;
-		}
-
-		print_floats<<<1,1>>>(n_input, d_inp, d_fv);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-		std::cout << std::endl;
-
-		host_dv_tmp[i] = d_fv;
-	}
-
-	std::cout << "precopy"<<std::endl;
-	// Copy to device Memory
-	CUDA_CHECK_RETURN(cudaMemcpy(*dv, host_dv_tmp, hv.size()*sizeof(FeatureVector*), cudaMemcpyHostToDevice));
-	std::cout << "postcopy"<<std::endl;
-
-	print_all<<<1,1>>>(n_input, n_output, *dv);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-	std::cout << "Copying data 4" << std::endl;
-}
-
-/*
- * Copies the host vector to a pointer array on the device
- * Cannot index from host
- * The final bias node is included in the inputs. This is so that when referencing the inputs
- * 	the bias is not lost
- */
-void GPUNet::copy_to_device_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv) {
-
-	CUDA_CHECK_RETURN(cudaMalloc((void **)&(*dv), hv.size()*sizeof(FeatureVector*)));
-
-	FeatureVector** host_dv_tmp = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
-
-	for (size_t i = 0; i < hv.size(); ++i) {
-		//allocate device memory
-		FeatureVector *d_fv;
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_fv, sizeof(FeatureVector)));
-
-		float *d_inp, *d_tar;
-		//allocate for bias
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_inp, (n_input+1)*sizeof(float)));
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_tar, (n_output)*sizeof(float)));
-
-		CUDA_CHECK_RETURN(cudaMemcpy(&(d_fv->input), &d_inp, sizeof(float *), cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpy(d_inp, hv[i]->input, (n_input)*sizeof(float), cudaMemcpyHostToDevice));
-
-		CUDA_CHECK_RETURN(cudaMemcpy(&(d_fv->target), &d_tar, sizeof(float *), cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpy(d_tar, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
-
-		//TODO: does setting all in parallel improve speed?
-		set_bias<<<1, 1>>>(n_input, d_inp);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-		for(int a = 0; a < n_input; a++) {
-			std::cout << a << ": " << hv[i]->input[a] << std::endl;
-		}
-
-		print_floats<<<1,1>>>(n_input+1, d_inp, d_fv);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-		std::cout << std::endl;
-
-		host_dv_tmp[i] = d_fv;
-	}
-
-	std::cout << "precopy"<<std::endl;
-    // Copy to device Memory
-    CUDA_CHECK_RETURN(cudaMemcpy(*dv, host_dv_tmp, hv.size()*sizeof(FeatureVector*), cudaMemcpyHostToDevice));
-    std::cout << "postcopy"<<std::endl;
-
-	print_all<<<1,1>>>(n_input, n_output, *dv);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-	std::cout << "Copying data 4" << std::endl;
-}
-
-/*
- * Copies the host vector to a pointer array on the host that holds pointers to head FeatureVector on the device
- */
-void GPUNet::copy_to_device_host_array(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv) {
-
-	(*dv) = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector));
-	//FeatureVector** host_dv_tmp = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
-
-	for (size_t i = 0; i < hv.size(); ++i) {
-		//allocate device memory
-		FeatureVector *d_fv;
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_fv, sizeof(FeatureVector)));
-
-		float *d_inp, *d_tar;
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_inp, (n_input)*sizeof(float)));
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_tar, (n_output)*sizeof(float)));
-
-		CUDA_CHECK_RETURN(cudaMemcpy(&(d_fv->input), &d_inp, sizeof(float *), cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpy(d_inp, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
-
-		CUDA_CHECK_RETURN(cudaMemcpy(&(d_fv->target), &d_tar, sizeof(float *), cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpy(d_tar, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
-
-
-
-		//for(int a = 0; a < n_input; a++) {
-		//	std::cout << a << ": " << hv[i]->input[a] << std::endl;
-		//}
-
-		//print_floats<<<1,1>>>(n_input, d_inp, d_fv);
-		//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-		//std::cout << std::endl;
-
-		(*dv)[i] = d_fv;
-	}
-
-	//for (int i = 0; i < 4; ++i) {
-	//	print_floats2<<<1,1>>>(n_input, (*dv)[i]);
-	//	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	//}
-
-}
-
-/*
- * Copies the host vector to a pointer array on the host that holds pointers to FeatureVector on the device with bias node
- */
-void GPUNet::copy_to_device_host_array_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv) {
-
-	(*dv) = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector));
-	//FeatureVector** host_dv_tmp = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
-
-	for (size_t i = 0; i < hv.size(); ++i) {
-		//allocate device memory
-		FeatureVector *d_fv;
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_fv, sizeof(FeatureVector)));
-
-		float *d_inp, *d_tar;
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_inp, (n_input+1)*sizeof(float)));
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_tar, (n_output)*sizeof(float)));
-
-		CUDA_CHECK_RETURN(cudaMemcpy(&(d_fv->input), &d_inp, sizeof(float *), cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpy(d_inp, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
-
-		CUDA_CHECK_RETURN(cudaMemcpy(&(d_fv->target), &d_tar, sizeof(float *), cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpy(d_tar, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
-
-
-		//TODO: does setting all in parallel improve speed?
-		set_bias<<<1, 1>>>(n_input, d_inp);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-		for(int a = 0; a < n_input; a++) {
-			std::cout << a << ": " << hv[i]->input[a] << std::endl;
-		}
-
-		print_floats<<<1,1>>>(n_input+1, d_inp, d_fv);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-		std::cout << std::endl;
-
-		//for(int a = 0; a < n_input; a++) {
-		//	std::cout << a << ": " << hv[i]->input[a] << std::endl;
-		//}
-
-		//print_floats<<<1,1>>>(n_input, d_inp, d_fv);
-		//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-		//std::cout << std::endl;
-
-		(*dv)[i] = d_fv;
-	}
-
-	//for (int i = 0; i < 4; ++i) {
-	//	print_floats2<<<1,1>>>(n_input, (*dv)[i]);
-	//	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	//}
-}
-
 
 /*
  * Copies the host vector to a pointer array on the host that holds pointers to FeatureVector on the device with bias node
  */
 void GPUNet::copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv) {
+	std::cout << "Copying data" << std::endl;
 
 	*dv = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
 	//FeatureVector** host_dv_tmp = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
@@ -2174,6 +1400,8 @@ void GPUNet::copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVe
  */
 void GPUNet::copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv,
 		int p_start, int p_end, bool allocate) {
+
+	std::cout << "Copying data, p_start = " << p_start << ", p_end = " << p_end << ", allocate = " << allocate << std::endl;
 
 	if (allocate) { // if the first epoch and the first section
 		*dv = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
