@@ -7,8 +7,7 @@
 
 #include "GPUNet.h"
 #include "NetTrainer.h"
-#include <boost/lexical_cast.hpp>
-#include <boost/algorithm/string.hpp>
+#include "NetIO.h"
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
@@ -482,6 +481,7 @@ GPUNet::GPUNet(int ni, int no, GPUNet::NetworkStructure net_type) {
 GPUNet::GPUNet(std::string net_file) {
 	std::cout << "Initializing from net file: " << net_file << "." << std::endl;
 	init_vars();
+	read_net(net_file);
 }
 
 GPUNet::~GPUNet() {
@@ -581,86 +581,6 @@ void GPUNet::init_vars() {
 	//}
 }
 
-
-int GPUNet::get_next_int(std::ifstream &in) {
-	std::string line;
-	std::getline(in, line);
-	std::vector<std::string> res;
-	boost::split(res, line, boost::is_any_of("="));
-	return boost::lexical_cast<int>(res[1]);
-}
-
-long GPUNet::get_next_long(std::ifstream &in) {
-	std::string line;
-	std::getline(in, line);
-	std::vector<std::string> res;
-	boost::split(res, line, boost::is_any_of("="));
-	return boost::lexical_cast<long>(res[1]);
-}
-
-float GPUNet::get_next_float(std::ifstream &in) {
-	std::string line;
-	std::getline(in, line);
-	std::vector<std::string> res;
-	boost::split(res, line, boost::is_any_of("="));
-	return boost::lexical_cast<float>(res[1]);
-}
-
-float* GPUNet::get_next_list(std::ifstream &in) {
-	std::string line;
-	std::getline(in, line);
-	std::vector<std::string> res;
-	boost::split(res, line, boost::is_any_of("="));
-	std::vector<std::string> list;
-	boost::split(list, res[1], boost::is_any_of(", "));
-
-	float *fl_list = new float[list.size()];
-	//just overwrite random GPU values
-	for (size_t i = 0; i < list.size(); ++i) {
-		fl_list[i] = boost::lexical_cast<float>(list[i]);
-	}
-	return fl_list;
-}
-
-bool GPUNet::read_net(std::string fname) {
-	std::ifstream in(fname.c_str());
-	if (in.is_open()) {
-		// num epochs
-		epoch = get_next_long(in);
-		max_epochs = get_next_long(in);
-		net_type = (GPUNet::NetworkStructure)get_next_int(in);
-
-		//skip n_layers
-		get_next_int(in);
-		n_input = get_next_int(in);
-		n_hidden = get_next_int(in);
-		n_output = get_next_int(in);
-
-		alloc_dev_mem();
-
-		l_rate = get_next_float(in);
-		momentum = get_next_float(in);
-		desired_acc = get_next_float(in);
-		trainingSetAccuracy = get_next_float(in);
-		generalizationSetAccuracy = get_next_float(in);
-		validationSetAccuracy = get_next_float(in);
-		trainingSetMSE = get_next_float(in);
-		generalizationSetMSE = get_next_float(in);
-		validationSetMSE = get_next_float(in);
-
-		float *ih_weights = get_next_list(in);
-		CUDA_CHECK_RETURN(cudaMemcpy(d_ih_weights, ih_weights, (n_input+1)*n_hidden*sizeof(float), cudaMemcpyHostToDevice));
-		float *ho_weights = get_next_list(in);
-		CUDA_CHECK_RETURN(cudaMemcpy(d_ho_weights, ho_weights, (n_hidden+1)*n_output*sizeof(float), cudaMemcpyHostToDevice));
-
-		delete[] ih_weights;
-		delete[] ho_weights;
-	} else {
-		std::cout << "Could not read net file!" << std::endl;
-		return false;
-	}
-	return true;
-}
 
 /*
  * allocate memory on device for
@@ -806,54 +726,72 @@ void GPUNet::print_net() {
  * write important data (num_epochs, layers, nodes/layer, l_rate, momentum, max_epochs, desired_acc, current mse, current acc)
  *
  */
-void GPUNet::write_net(std::string fname) {
-	std::ofstream of(fname.c_str());
-
+bool GPUNet::write_net(std::string fname) {
 	float *ih_weights = new float[(n_input+1)*(n_hidden)];
 	float *ho_weights = new float[(n_hidden+1)*(n_output)];
 
 	CUDA_CHECK_RETURN(cudaMemcpy(ih_weights, d_ih_weights, (n_input+1)*(n_hidden)*sizeof(float), cudaMemcpyDeviceToHost));
 	CUDA_CHECK_RETURN(cudaMemcpy(ho_weights, d_ho_weights, (n_hidden+1)*(n_output)*sizeof(float), cudaMemcpyDeviceToHost));
 
-	if (of.is_open()) {
-		of << "num_epochs=" << epoch << "\n";
-		of << "max_epochs=" << max_epochs << "\n";
-		of << "net_type=" << net_type << "\n";
-		of << "num_layers=" << 3 << "\n";
-		of << "n_layer_0=" << n_input << "\n";
-		of << "n_layer_1=" << n_hidden << "\n";
-		of << "n_layer_2=" << n_output << "\n";
-		of << "l_rate=" << l_rate << "\n";
-		of << "momentum=" << momentum << "\n";
-		of << "desired_acc=" << desired_acc << "\n";
-		of << "tset_acc=" << trainingSetAccuracy << "\n";
-		of << "gset_acc=" << generalizationSetAccuracy << "\n";
-		of << "vset_acc=" << validationSetAccuracy << "\n";
-		of << "tset_mse=" << trainingSetMSE << "\n";
-		of << "gset_mse=" << generalizationSetMSE << "\n";
-		of << "vset_mse=" << validationSetMSE << "\n";
-		of << "weights_ih=";
-		for (int i = 0, l = (n_input+1)*n_hidden; i < l; ++i) {
-			of << ih_weights[i];
-			if (i != l-1)
-				of << ",";
-		}
-		of << "\n";
-		of << "weights_ho=";
-		for (int i = 0, l = (n_hidden+1)*n_output; i < l; ++i) {
-			of << ho_weights[i];
-			if (i != l-1)
-				of << ",";
-		}
+	NetIO nio;
+	nio.epoch = epoch;
+	nio.max_epochs = max_epochs;
+	nio.net_type = net_type;
+	nio.n_input = n_input;
+	nio.n_hidden = n_input;
+	nio.n_output = n_input;
+	nio.l_rate = l_rate;
+	nio.momentum = momentum;
+	nio.desired_acc = desired_acc;
+	nio.trainingSetAccuracy = trainingSetAccuracy;
+	nio.generalizationSetAccuracy = generalizationSetAccuracy;
+	nio.validationSetAccuracy = validationSetAccuracy;
+	nio.trainingSetMSE = trainingSetMSE;
+	nio.generalizationSetMSE = generalizationSetMSE;
+	nio.validationSetMSE = validationSetMSE;
+	nio.ih_weights = ih_weights;
+	nio.ho_weights = ho_weights;
 
-		of.flush();
-		of.close();
-	} else {
-		std::cout << "Could not write file!" << std::endl;
+	if (!nio.write_net(fname)) {
+		std::cout << "Write failed" << std::endl;
+		return false;
 	}
-
 	delete[] ih_weights;
 	delete[] ho_weights;
+
+	return true;
+}
+
+bool GPUNet::read_net(std::string fname) {
+	NetIO nio;
+	if (!nio.read_net(fname)) {
+		std::cerr << "Read failed" << std::endl;
+		return false;
+	}
+	epoch = nio.epoch;
+	max_epochs = nio.max_epochs;
+	net_type = nio.net_type;
+
+	n_input = nio.n_input;
+	n_hidden = nio.n_hidden;
+	n_output = nio.n_output;
+	//now know network size, so allocate
+	alloc_dev_mem();
+
+	l_rate = nio.l_rate;
+	momentum = nio.momentum;
+	desired_acc = nio.desired_acc;
+	trainingSetAccuracy = nio.trainingSetAccuracy;
+	generalizationSetAccuracy = nio.generalizationSetAccuracy;
+	validationSetAccuracy = nio.validationSetAccuracy;
+	trainingSetMSE = nio.trainingSetMSE;
+	generalizationSetMSE = nio.generalizationSetMSE;
+	validationSetMSE = nio.validationSetMSE;
+
+	CUDA_CHECK_RETURN(cudaMemcpy(d_ih_weights, nio.ih_weights, (n_input+1)*n_hidden*sizeof(float), cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemcpy(d_ho_weights, nio.ho_weights, (n_hidden+1)*n_output*sizeof(float), cudaMemcpyHostToDevice));
+
+	return true;
 }
 
 /*
@@ -878,7 +816,7 @@ float* GPUNet::batch_evaluate(float** inputs) {
 	//copy back output
 	int threads = 128;
 	float *h_out = new float[n_output];
-	CUDA_CHECK_RETURN(cudaMemcpy((void*)d_input, (void*)input, n_input*sizeof(float), cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemcpy((void*)d_input, (void*)inputs, n_input*sizeof(float), cudaMemcpyHostToDevice));
 	feed_forward_v1_2(d_input);
 	clamp_outputs<<<(n_output+threads-1)/threads, threads>>>(d_output, n_output);
 	CUDA_CHECK_RETURN(cudaMemcpy(h_out, d_output, n_output*sizeof(float), cudaMemcpyDeviceToHost));

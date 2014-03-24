@@ -57,7 +57,7 @@ public:
 	void init_from_net(Net &net, NetData &d);
 	void init_net();
 	void print_net();
-	void write_net(std::string fname);
+	bool write_net(std::string fname);
 	bool read_net(std::string fname);
 
 	int get_num_input();
@@ -142,11 +142,6 @@ private:
 	float generalizationSetMSE;
 
 	void run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features);
-
-	int get_next_int(std::ifstream &in);
-	long get_next_long(std::ifstream &in);
-	float get_next_float(std::ifstream &in);
-	float* get_next_list(std::ifstream &in);
 
 	void add_gpu_mem(int bytes);
 	int get_current_device();
