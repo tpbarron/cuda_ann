@@ -3,6 +3,10 @@
  *
  *  Created on: Jan 5, 2014
  *      Author: trevor
+ *
+ *  GPU Neural Network
+ *  Maintains network state and invokes functions on the GPU
+ *
  */
 
 #include "GPUNet.h"
@@ -1180,7 +1184,7 @@ size_t GPUNet::dataset_size(TrainingDataSet *tset) {
 size_t GPUNet::total_dev_mem(int dev) {
 	cudaDeviceProp props;
 	cudaGetDeviceProperties(&props, dev);
-	return props.totalGlobalMem - 1611000000; //minus 1.5 gb
+	return props.totalGlobalMem; // - 1611000000; //minus 1.5 gb
 }
 
 

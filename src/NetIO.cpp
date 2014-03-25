@@ -10,7 +10,18 @@
 #include <boost/algorithm/string.hpp>
 #include <fstream>
 
-NetIO::NetIO() {}
+NetIO::NetIO() {
+	epoch = 0, max_epochs = 0;
+	net_type = GPUNet::STANDARD;
+
+	n_input = 0, n_hidden = 0, n_output = 0;
+
+	l_rate = 0, momentum = 0, desired_acc = 0;
+	trainingSetAccuracy = 0, generalizationSetAccuracy = 0, validationSetAccuracy = 0;
+	trainingSetMSE = 0, generalizationSetMSE = 0, validationSetMSE = 0;
+
+	ih_weights = NULL, ho_weights = NULL;
+}
 
 NetIO::~NetIO() {}
 
