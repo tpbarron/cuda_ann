@@ -77,13 +77,13 @@ int main(void) {
 //	return 0;
 
 	gnet.set_training_params(0.9, 0.9);
-	gnet.set_stopping_conds(10, 95.0);
+	gnet.set_stopping_conds(30, 95.0);
 	start = clock();
 	gnet.train_net_sectioned(d.get_training_dataset());
 	stop = clock();
 	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 	//gnet.print_net();
-	//gnet.write_net("nets/and.net");
+	gnet.write_net("nets/face.net");
 
 
 //	NetTrainer nt(&net);

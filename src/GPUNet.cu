@@ -757,7 +757,7 @@ bool GPUNet::write_net(std::string fname) {
 	nio.ho_weights = ho_weights;
 
 	if (!nio.write_net(fname)) {
-		std::cout << "Write failed" << std::endl;
+		std::cerr << "Write failed" << std::endl;
 		return false;
 	}
 	delete[] ih_weights;
@@ -879,12 +879,13 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 	if (n_sections == 1) { // no section copying necessary
 		copy_to_device_host_array_ptrs_biased(tset->training_set, &d_training_set);
 		while (epoch < max_epochs) {
-			run_training_epoch_dev(d_training_set, tset->training_set.size());
 			std::cout << "Epoch: " << epoch << std::endl;
+			run_training_epoch_dev(d_training_set, tset->training_set.size());
 			++epoch;
 		}
 	} else {
 		while (epoch < max_epochs) {
+			std::cout << "Epoch: " << epoch << std::endl;
 			//copy a section and run partial epoch
 			for (int i = 0; i < n_sections; ++i) {
 				//copy patterns from [n_sections*n_patterns_copyable, (n_sections+1)*n_patterns_copyable)
@@ -897,7 +898,6 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 				run_training_epoch_dev(d_training_set, p_end-p_start);
 			}
 
-			std::cout << "Epoch: " << epoch << std::endl;
 			//once training set is complete increment epoch
 			++epoch;
 		}
@@ -922,6 +922,7 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 
 
 void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features) {
+	start = clock();
 	for (size_t i = 0; i < n_features; ++i) {
 		feed_forward_v1_2(feature_vecs[i]->input);
 		backprop_v2(feature_vecs[i]->input, feature_vecs[i]->target);
@@ -929,6 +930,8 @@ void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_featu
 	}
 	calc_mse<<<1, 1>>>(n_output, n_features);
 	calc_acc<<<1, 1>>>(n_features);
+	finish = clock();
+	std::cout << "Epoch time: " << ((double)finish-start)/CLOCKS_PER_SEC << std::endl;
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	//float mse = 0;
 	//CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse, d_mse, sizeof(float), 0, cudaMemcpyDeviceToHost));
@@ -1194,6 +1197,7 @@ size_t GPUNet::total_dev_mem(int dev) {
  */
 void GPUNet::copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv) {
 	std::cout << "Copying data" << std::endl;
+	start = clock();
 
 	*dv = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
 	//FeatureVector** host_dv_tmp = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
@@ -1219,7 +1223,8 @@ void GPUNet::copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVe
 
 		(*dv)[i] = d_fv;
 	}
-
+	finish = clock();
+	std::cout << "Copy time: " << ((float)finish-start)/CLOCKS_PER_SEC << std::endl;
 }
 
 /**
@@ -1230,6 +1235,7 @@ void GPUNet::copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<F
 		int p_start, int p_end, bool allocate) {
 
 	std::cout << "Copying data, p_start = " << p_start << ", p_end = " << p_end << ", allocate = " << allocate << std::endl;
+	start = clock();
 
 	if (allocate) { // if the first epoch and the first section
 		*dv = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
@@ -1260,4 +1266,6 @@ void GPUNet::copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<F
 			CUDA_CHECK_RETURN(cudaMemcpy((*dv)[p]->target, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
 		}
 	}
+	finish = clock();
+	std::cout << "Copy time: " << ((float)finish-start)/CLOCKS_PER_SEC << std::endl;
 }
