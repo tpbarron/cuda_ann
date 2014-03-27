@@ -59,6 +59,11 @@ void Profiler::cuda_stop() {
 	cudaEventSynchronize(cu_stop);
 }
 
+/*
+ * Bandwidth calculation
+ *
+ * BW_effective = (Rb + Wb) / (t * 10^9)
+ */
 float Profiler::profile_feed_forward_v1_2(NetData &d) {
 	std::cout << "Profiling feed forward v1.2 over " << iterations << " iterations." << std::endl;
 
@@ -69,6 +74,37 @@ float Profiler::profile_feed_forward_v1_2(NetData &d) {
 
 	for (int i = 0; i < iterations; ++i) {
 		gnet->feed_forward_v1_2(dv[0]->input);
+	}
+
+	cuda_stop();
+
+	//layer1 - > 2 read
+	int bytes_total_layer1 = gnet->get_num_hidden() * ((8*gnet->get_num_input()+1)+4) * iterations;
+	int bytes_total_layer2 = gnet->get_num_output() * ((8*gnet->get_num_hidden()+1)+4) * iterations;
+
+	int bytes_total = bytes_total_layer1 + bytes_total_layer2;
+
+	float milliseconds = 0;
+	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
+
+	float bw_effective = bytes_total / (milliseconds * 1e6);
+
+	std::cout << milliseconds << " ms" << std::endl;
+	std::cout << "Effective bandwidth: " << bw_effective << std::endl;
+	return milliseconds;
+}
+
+
+float Profiler::profile_feed_forward_v1_3(NetData &d) {
+	std::cout << "Profiling feed forward v1.3 over " << iterations << " iterations." << std::endl;
+
+	FeatureVector **dv;
+	gnet->copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
+
+	cuda_start();
+
+	for (int i = 0; i < iterations; ++i) {
+		gnet->feed_forward_v1_3(dv[0]->input);
 	}
 
 	cuda_stop();

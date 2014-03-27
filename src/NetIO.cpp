@@ -23,7 +23,10 @@ NetIO::NetIO() {
 	ih_weights = NULL, ho_weights = NULL;
 }
 
-NetIO::~NetIO() {}
+NetIO::~NetIO() {
+	delete[] ih_weights;
+	delete[] ho_weights;
+}
 
 bool NetIO::read_net(std::string fname) {
 	std::ifstream in(fname.c_str());
@@ -49,11 +52,10 @@ bool NetIO::read_net(std::string fname) {
 		generalizationSetMSE = get_next_float(in);
 		validationSetMSE = get_next_float(in);
 
-		float *ih_weights = get_next_list(in);
-		float *ho_weights = get_next_list(in);
+		ih_weights = get_next_list(in);
+		ho_weights = get_next_list(in);
 
-		delete[] ih_weights;
-		delete[] ho_weights;
+		in.close();
 	} else {
 		std::cerr << "Could not read net file!" << std::endl;
 		return false;
@@ -68,8 +70,13 @@ bool NetIO::read_net(std::string fname) {
  *
  */
 bool NetIO::write_net(std::string fname) {
+	std::cout << "NetIO: name=" << fname << std::endl;
 	std::ofstream of(fname.c_str());
+	std::cout << "NetIO: ofstream initialized" <<std::endl;
+
 	if (of.is_open()) {
+		std::cout << "NetIO: file open" << std::endl;
+
 		of << "num_epochs=" << epoch << "\n";
 		of << "max_epochs=" << max_epochs << "\n";
 		of << "net_type=" << net_type << "\n";

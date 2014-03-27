@@ -46,7 +46,6 @@ public:
 		GPU_ARCH_OPT = 1
 	};
 
-	GPUNet();
 	GPUNet(int ni, int no, GPUNet::NetworkStructure net_type);
 	GPUNet(std::string net_file);
 	~GPUNet();
@@ -72,8 +71,10 @@ public:
 	void set_stopping_conds(int me, float acc);
 	void calc_dataset_parameters(TrainingDataSet *tset);
 	void train_net_sectioned(TrainingDataSet *tset);
+	void train_net_sectioned_overlap(TrainingDataSet *tset);
 
 	void feed_forward_v1_2(float *d_inp);
+	void feed_forward_v1_3(float *d_inp);
 	void feed_forward_v2_2(unsigned int n, float *d_inp, float *d_sums); //inputs already copied
 
 	void backprop_v2(float *d_inp, float *d_tar);
@@ -93,6 +94,8 @@ public:
 	void copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
 	void copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv,
 			int p_start, int p_end, bool allocate);
+	void copy_to_device_host_array_ptrs_biased_section_stream(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv,
+			int p_start, int p_end, bool allocate, cudaStream_t stream);
 
 private:
 
@@ -108,7 +111,7 @@ private:
 	/*
 	 * GPU state
 	 */
-	cudaStream_t err_calc_stream, weight_update_stream;
+	cudaStream_t err_calc_stream, weight_update_stream, train_stream1, train_stream2;
 	cudaEvent_t event1;
 
 	/*

@@ -28,10 +28,11 @@
 void profile(GPUNet &gnet, Net &net, NetData &d) {
 	NetTrainer nt(&net);
 	Profiler p(&gnet, &net, &nt);
-	p.set_iterations(1);
+	p.set_iterations(100);
 	p.profile_feed_forward_v1_2(d);
+	p.profile_feed_forward_v1_3(d);
 	//p.profile_feed_forward_v2_2(d);
-	p.profile_cpu_feedforward(d.get_training_dataset()->training_set[0]->input);
+	//p.profile_cpu_feedforward(d.get_training_dataset()->training_set[0]->input);
 
 	//p.profile_backprop_v2(d);
 	//p.profile_cpu_backprop(d.get_training_dataset()->training_set[0]->target);
@@ -51,21 +52,17 @@ void test(GPUNet &gnet, Net &net, NetData &d) {
 int main(void) {
 	srand(time(NULL));
 
-//	GPUNet gnet("nets/and.net");
-//	gnet.print_net();
-//	return 0;
-
 	time_t start, stop;
 
 	NetData d;
-	if (!d.load_file("datasets/face.dat.norm"))
+	if (!d.load_file("datasets/and.dat"))
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
 
-	Net net(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
-	GPUNet gnet(d.num_inputs(), d.num_targets(), GPUNet::STANDARD);
-	gnet.alloc_dev_mem();
-	gnet.init_from_net(net, d);
+//	Net net(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
+//	GPUNet gnet(d.num_inputs(), d.num_targets(), GPUNet::STANDARD);
+//	gnet.alloc_dev_mem();
+//	gnet.init_from_net(net, d);
 
 //	gnet.init_net();
 //	gnet.print_net();
@@ -76,14 +73,15 @@ int main(void) {
 //	gnet.run_parallel(net, d);
 //	return 0;
 
+	GPUNet gnet("nets/and1.net");
 	gnet.set_training_params(0.9, 0.9);
-	gnet.set_stopping_conds(30, 95.0);
+	gnet.set_stopping_conds(31, 95.0);
 	start = clock();
 	gnet.train_net_sectioned(d.get_training_dataset());
 	stop = clock();
 	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 	//gnet.print_net();
-	gnet.write_net("nets/face.net");
+	gnet.write_net("nets/and2.net");
 
 
 //	NetTrainer nt(&net);
