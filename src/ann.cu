@@ -6,7 +6,7 @@
 #include "GPUNet.h"
 #include "NetTrainer.h"
 #include "Profiler.h"
-
+#include <boost/lexical_cast.hpp>
 
 /**
  * This macro checks return value of the CUDA runtime call and exits
@@ -74,14 +74,19 @@ int main(void) {
 //	return 0;
 
 	GPUNet gnet("nets/and1.net");
-	gnet.set_training_params(0.9, 0.9);
-	gnet.set_stopping_conds(31, 95.0);
-	start = clock();
-	gnet.train_net_sectioned(d.get_training_dataset());
-	stop = clock();
-	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
-	//gnet.print_net();
-	gnet.write_net("nets/and2.net");
+
+	for (int i = 2; i < 10; ++i) {
+		std::string fname = "nets/and"+boost::lexical_cast<std::string>(i)+".net";
+		gnet.write_net(fname);
+	}
+//	gnet.set_training_params(0.9, 0.9);
+//	gnet.set_stopping_conds(31, 95.0);
+//	start = clock();
+//	gnet.train_net_sectioned(d.get_training_dataset());
+//	stop = clock();
+//	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
+//	//gnet.print_net();
+//	gnet.write_net("nets/and2.net");
 
 
 //	NetTrainer nt(&net);

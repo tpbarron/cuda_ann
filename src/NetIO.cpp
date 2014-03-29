@@ -55,9 +55,10 @@ bool NetIO::read_net(std::string fname) {
 		ih_weights = get_next_list(in);
 		ho_weights = get_next_list(in);
 
+		std::cout << "NetIO: Closing file" <<std::endl;
 		in.close();
 	} else {
-		std::cerr << "Could not read net file!" << std::endl;
+		std::cerr << "NetIO: Could not read net file!" << std::endl;
 		return false;
 	}
 	return true;
@@ -72,34 +73,35 @@ bool NetIO::read_net(std::string fname) {
 bool NetIO::write_net(std::string fname) {
 	std::cout << "NetIO: name=" << fname << std::endl;
 	std::ofstream of(fname.c_str());
+	std::cout << "NetIO: Is good: " << of.good() << std::endl;
 	std::cout << "NetIO: ofstream initialized" <<std::endl;
 
 	if (of.is_open()) {
 		std::cout << "NetIO: file open" << std::endl;
 
-		of << "num_epochs=" << epoch << "\n";
-		of << "max_epochs=" << max_epochs << "\n";
-		of << "net_type=" << net_type << "\n";
-		of << "num_layers=" << 3 << "\n";
-		of << "n_layer_0=" << n_input << "\n";
-		of << "n_layer_1=" << n_hidden << "\n";
-		of << "n_layer_2=" << n_output << "\n";
-		of << "l_rate=" << l_rate << "\n";
-		of << "momentum=" << momentum << "\n";
-		of << "desired_acc=" << desired_acc << "\n";
-		of << "tset_acc=" << trainingSetAccuracy << "\n";
-		of << "gset_acc=" << generalizationSetAccuracy << "\n";
-		of << "vset_acc=" << validationSetAccuracy << "\n";
-		of << "tset_mse=" << trainingSetMSE << "\n";
-		of << "gset_mse=" << generalizationSetMSE << "\n";
-		of << "vset_mse=" << validationSetMSE << "\n";
+		of << "num_epochs=" << epoch << std::endl;
+		of << "max_epochs=" << max_epochs << std::endl;
+		of << "net_type=" << net_type << std::endl;
+		of << "num_layers=" << 3 << std::endl;
+		of << "n_layer_0=" << n_input << std::endl;
+		of << "n_layer_1=" << n_hidden << std::endl;
+		of << "n_layer_2=" << n_output << std::endl;
+		of << "l_rate=" << l_rate << std::endl;
+		of << "momentum=" << momentum << std::endl;
+		of << "desired_acc=" << desired_acc << std::endl;
+		of << "tset_acc=" << trainingSetAccuracy << std::endl;
+		of << "gset_acc=" << generalizationSetAccuracy << std::endl;
+		of << "vset_acc=" << validationSetAccuracy << std::endl;
+		of << "tset_mse=" << trainingSetMSE << std::endl;
+		of << "gset_mse=" << generalizationSetMSE << std::endl;
+		of << "vset_mse=" << validationSetMSE << std::endl;
 		of << "weights_ih=";
 		for (int i = 0, l = (n_input+1)*n_hidden; i < l; ++i) {
 			of << ih_weights[i];
 			if (i != l-1)
 				of << ",";
 		}
-		of << "\n";
+		of << std::endl;
 		of << "weights_ho=";
 		for (int i = 0, l = (n_hidden+1)*n_output; i < l; ++i) {
 			of << ho_weights[i];
@@ -109,8 +111,9 @@ bool NetIO::write_net(std::string fname) {
 
 		of.flush();
 		of.close();
+		std::cout << "NetIO: Closed file" <<std::endl;
 	} else {
-		std::cerr << "Could not write file!" << std::endl;
+		std::cerr << "NetIO: Could not write file!" << std::endl;
 		return false;
 	}
 	return true;
