@@ -23,8 +23,9 @@
 16. Compare to FANN
 17. Implement RProp
 18. Ensure that weight initialization with curand does not have race condition.
+  * Should be ok since only 32 threads can run at a single time. But if there are more than 1 sm processors, then the curand states could be accessed simultaneously.
 19. Add batch learning option
 20. Modify for arbitrary number of layers
-
-See [here](http://stackoverflow.com/questions/5810447/cuda-block-and-grid-size-efficiencies) to calculate params for kernels
+21. Calculate optimal block and grid sizes -- See [here](http://stackoverflow.com/questions/5810447/cuda-block-and-grid-size-efficiencies) to calculate params for kernels
+22. Add feature selection to dataset processor
 

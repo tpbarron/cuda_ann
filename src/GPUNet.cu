@@ -525,6 +525,8 @@ GPUNet::~GPUNet() {
 	CUDA_CHECK_RETURN(cudaEventDestroy(event1));
 
 	delete[] h_output;
+	delete[] h_ih_weights;
+	delete[] h_ho_weights;
 	delete[] gpu_mem;
 	delete nio;
 }
@@ -561,6 +563,7 @@ void GPUNet::init_vars() {
 	l_rate = GPUNetSettings::GPU_LEARNING_RATE;
 	momentum = GPUNetSettings::GPU_MOMENTUM;
 	desired_acc = GPUNetSettings::GPU_DESIRED_ACCURACY;
+	batching = GPUNetSettings::GPU_USE_BATCH;
 	CUDA_CHECK_RETURN(cudaGetDeviceCount(&n_gpus));
 
 	epoch = 0;
@@ -709,9 +712,10 @@ void GPUNet::set_momentum(float m) {
 	momentum = m;
 }
 
-void GPUNet::set_training_params(float lr, float m) {
+void GPUNet::set_training_params(float lr, float m, bool b) {
 	l_rate = lr;
 	momentum = m;
+	batching = b;
 }
 
 void GPUNet::set_max_epochs(int me) {
@@ -976,8 +980,8 @@ void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_featu
 		backprop_v2(feature_vecs[i]->input, feature_vecs[i]->target);
 		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	}
-	calc_mse<<<1, 1>>>(n_output, n_features);
-	calc_acc<<<1, 1>>>(n_features);
+	calc_mse<<<1, 1, 0, err_calc_stream>>>(n_output, n_features);
+	calc_acc<<<1, 1, 0, err_calc_stream>>>(n_features);
 	finish = clock();
 	std::cout << "Epoch time: " << ((double)finish-start)/CLOCKS_PER_SEC << std::endl;
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
