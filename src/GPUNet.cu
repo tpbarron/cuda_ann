@@ -432,7 +432,7 @@ __global__ void update_input_hidden_deltas_v2(int ni, int nh, float l_rate, floa
 /*
  * called generically with power of 2 threads
  */
-__global__ void update_weights_v2(int n1, int n2, float *d_weights, float *deltas) {
+__global__ void update_weights_v2(int n1, int n2, float *d_weights, float *deltas, bool reset) {
 	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
 
 	if (x < (n1+1)*n2) {
@@ -441,6 +441,9 @@ __global__ void update_weights_v2(int n1, int n2, float *d_weights, float *delta
 
 		d_weights[i*n2 + j] += deltas[i*n2 + j];
 		//printf("d_weights(%d, %d) = %f, deltas(%d, %d) = %f\n", i, j, d_weights[n2*i+j], i, j, deltas[n2*i + j]);
+
+		if (reset)
+			deltas[i*n2 + j] = 0;
 	}
 }
 
@@ -525,6 +528,8 @@ GPUNet::~GPUNet() {
 	CUDA_CHECK_RETURN(cudaEventDestroy(event1));
 
 	delete[] h_output;
+	delete[] h_ih_weights;
+	delete[] h_ho_weights;
 	delete[] gpu_mem;
 	delete nio;
 }
@@ -561,6 +566,7 @@ void GPUNet::init_vars() {
 	l_rate = GPUNetSettings::GPU_LEARNING_RATE;
 	momentum = GPUNetSettings::GPU_MOMENTUM;
 	desired_acc = GPUNetSettings::GPU_DESIRED_ACCURACY;
+	batching = GPUNetSettings::GPU_USE_BATCH;
 	CUDA_CHECK_RETURN(cudaGetDeviceCount(&n_gpus));
 
 	epoch = 0;
@@ -709,9 +715,10 @@ void GPUNet::set_momentum(float m) {
 	momentum = m;
 }
 
-void GPUNet::set_training_params(float lr, float m) {
+void GPUNet::set_training_params(float lr, float m, bool b) {
 	l_rate = lr;
 	momentum = m;
+	batching = b;
 }
 
 void GPUNet::set_max_epochs(int me) {
@@ -970,14 +977,19 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 
 
 void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features) {
+	int n_threads = 128;
 	start = clock();
 	for (size_t i = 0; i < n_features; ++i) {
 		feed_forward_v1_2(feature_vecs[i]->input);
 		backprop_v2(feature_vecs[i]->input, feature_vecs[i]->target);
 		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	}
-	calc_mse<<<1, 1>>>(n_output, n_features);
-	calc_acc<<<1, 1>>>(n_features);
+	if (batching) { //update weights here and reset deltas
+		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas, true);
+		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, true);
+	}
+	calc_mse<<<1, 1, 0, err_calc_stream>>>(n_output, n_features);
+	calc_acc<<<1, 1, 0, err_calc_stream>>>(n_features);
 	finish = clock();
 	std::cout << "Epoch time: " << ((double)finish-start)/CLOCKS_PER_SEC << std::endl;
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
@@ -1009,16 +1021,20 @@ void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
 			d_hid_err_gradients, d_out_err_gradients);
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-	CUDA_CHECK_RETURN(cudaEventRecord(event1));
-	CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream, event1, 0));
-	update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas);
+	if (!batching) { // don't update weights here
+		CUDA_CHECK_RETURN(cudaEventRecord(event1));
+		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream, event1, 0));
+		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas, false);
+	}
 
 	update_input_hidden_deltas_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads>>>(n_input, n_hidden, l_rate, momentum,
 			d_inp, d_hid_err_gradients, d_ih_deltas);
 
-	CUDA_CHECK_RETURN(cudaEventRecord(event1));
-	CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream, event1, 0));
-	update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas);
+	if (!batching) { // don't update weights here
+		CUDA_CHECK_RETURN(cudaEventRecord(event1));
+		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream, event1, 0));
+		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
+	}
 }
 
 
