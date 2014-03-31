@@ -90,6 +90,11 @@ bool NetIO::write_net(std::string fname) {
 		of << "l_rate=" << gnet->l_rate << std::endl;
 		of << "momentum=" << gnet->momentum << std::endl;
 		of << "desired_acc=" << gnet->desired_acc << std::endl;
+
+		if (gnet->trainingSetAccuracy == 0 || gnet->trainingSetMSE == 0) {
+			std::cerr << "Incorrect stats. Exiting." << std::endl;
+			exit(0);
+		}
 		of << "tset_acc=" << gnet->trainingSetAccuracy << std::endl;
 		of << "gset_acc=" << gnet->generalizationSetAccuracy << std::endl;
 		of << "vset_acc=" << gnet->validationSetAccuracy << std::endl;
