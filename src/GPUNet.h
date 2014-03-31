@@ -57,17 +57,21 @@ public:
 	void set_momentum(float m);
 	void set_training_params(float lr, float m, bool b);
 	void set_max_epochs(int max_epochs);
+	void set_save_frequency(int f);
 	void set_desired_accuracy(float acc);
 	void set_stopping_conds(int me, float acc);
 	void calc_dataset_parameters(TrainingDataSet *tset);
 	void train_net_sectioned(TrainingDataSet *tset);
 	void train_net_sectioned_overlap(TrainingDataSet *tset);
 
+	void copy_error_to_host();
+
 	void feed_forward_v1_2(float *d_inp);
 	void feed_forward_v1_3(float *d_inp);
 	void feed_forward_v2_2(unsigned int n, float *d_inp, float *d_sums); //inputs already copied
 
 	void backprop_v2(float *d_inp, float *d_tar);
+	void rprop(float *d_inp, float *d_tar);
 
 	float* evaluate(float* input);
 	float* batch_evaluate(float** inputs);
@@ -100,6 +104,7 @@ public:
 	GPUNetSettings::NetworkStructure net_type;
 	int n_copyable_patterns;
 	int n_sections;
+	int save_freq;
 
 	/*
 	 * GPU state

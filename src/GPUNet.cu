@@ -567,6 +567,7 @@ void GPUNet::init_vars() {
 	momentum = GPUNetSettings::GPU_MOMENTUM;
 	desired_acc = GPUNetSettings::GPU_DESIRED_ACCURACY;
 	batching = GPUNetSettings::GPU_USE_BATCH;
+	save_freq = GPUNetSettings::GPU_SAVE_FREQUENCY;
 	CUDA_CHECK_RETURN(cudaGetDeviceCount(&n_gpus));
 
 	epoch = 0;
@@ -725,6 +726,10 @@ void GPUNet::set_max_epochs(int me) {
 	max_epochs = me;
 }
 
+void GPUNet::set_save_frequency(int f) {
+	save_freq = f;
+}
+
 void GPUNet::set_desired_accuracy(float acc) {
 	desired_acc = acc;
 }
@@ -751,6 +756,10 @@ void GPUNet::print_net() {
  *
  */
 bool GPUNet::write_net(std::string fname) {
+	//need to copy mse and acc back to host
+	copy_error_to_host();
+	std::cout << "current acc=" << trainingSetAccuracy << ", current mse=" << trainingSetMSE << std::endl;
+
 	if (!nio->write_net(fname)) {
 		std::cerr << "Write failed" << std::endl;
 		return false;
@@ -894,9 +903,8 @@ void GPUNet::train_net_sectioned_overlap(TrainingDataSet *tset) {
 	//out validation accuracy and MSE
 	std::cout << std::endl << "Training complete. Elapsed epochs: " << epoch << std::endl;
 
-	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&trainingSetMSE, d_mse, sizeof(float), 0, cudaMemcpyDeviceToHost));
+	copy_error_to_host();
 	std::cout << "MSE = " << trainingSetMSE << std::endl;
-	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&trainingSetAccuracy, d_acc, sizeof(float), 0, cudaMemcpyDeviceToHost));
 	std::cout << "ACC = " << trainingSetAccuracy << std::endl;
 
 	//free training set
@@ -932,7 +940,7 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 			run_training_epoch_dev(d_training_set, tset->training_set.size());
 			++epoch;
 
-			if (epoch % 5 == 0) {
+			if (epoch % save_freq == 0) {
 				std::string fname = "nets/trevor_alan_250_" + boost::lexical_cast<std::string>(epoch) + ".net";
 				std::cout << "Writing intermediary net " << fname << std::endl;
 				write_net(fname);
@@ -961,9 +969,8 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 	//out validation accuracy and MSE
 	std::cout << std::endl << "Training complete. Elapsed epochs: " << epoch << std::endl;
 
-	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&trainingSetMSE, d_mse, sizeof(float), 0, cudaMemcpyDeviceToHost));
+	copy_error_to_host();
 	std::cout << "MSE = " << trainingSetMSE << std::endl;
-	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&trainingSetAccuracy, d_acc, sizeof(float), 0, cudaMemcpyDeviceToHost));
 	std::cout << "ACC = " << trainingSetAccuracy << std::endl;
 
 	//free training set
@@ -973,6 +980,11 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 		free(d_training_set[i]);
 	}
 	free(d_training_set);
+}
+
+void GPUNet::copy_error_to_host() {
+	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&trainingSetMSE, d_mse, sizeof(float), 0, cudaMemcpyDeviceToHost));
+	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&trainingSetAccuracy, d_acc, sizeof(float), 0, cudaMemcpyDeviceToHost));
 }
 
 
@@ -1035,6 +1047,10 @@ void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
 		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream, event1, 0));
 		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
 	}
+}
+
+void GPUNet::rprop(float *d_inp, float *d_tar) {
+
 }
 
 
