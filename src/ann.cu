@@ -56,15 +56,16 @@ int main(void) {
 	time_t start, stop;
 
 	NetData d;
-	if (!d.load_file("datasets/and.dat"))
+	if (!d.load_file("datasets/trevor_alan_250.dat.norm"))
+	//if (!d.load_file("datasets/and.dat"))
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
 
 	Net net(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
 	GPUNet gnet(d.num_inputs(), d.num_targets(), GPUNetSettings::STANDARD);
+
 	gnet.alloc_dev_mem();
 	gnet.init_from_net(net, d);
-
 //	gnet.init_net();
 //	gnet.print_net();
 //	std::cout << "Dev 0: " << gnet.current_mem_usage(0) << std::endl;
@@ -77,13 +78,13 @@ int main(void) {
 //	GPUNet gnet("nets/and2.net");
 
 	gnet.set_training_params(0.9, 0.9);
-	gnet.set_stopping_conds(100, 95.0);
+	gnet.set_stopping_conds(125, 95.0);
 	start = clock();
 	gnet.train_net_sectioned(d.get_training_dataset());
 	stop = clock();
 	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 	//gnet.print_net();
-	gnet.write_net("nets/and_final.net");
+	gnet.write_net("nets/trevor_alan_250_final.net");
 
 
 //	NetTrainer nt(&net);

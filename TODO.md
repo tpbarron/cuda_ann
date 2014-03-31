@@ -1,7 +1,7 @@
 # TODO list for CUDA Neural Network
 
 1. (DONE) Fix random number generator for weight initialization
-2. DONE Parallelize node and weight initialization
+2. (DONE) Parallelize node and weight initialization
   * parallelize by layer
   * These are not order dependent
 3. (DONE) Fix method 2 of feed forward
@@ -22,6 +22,7 @@
 15. Run a test case
 16. Compare to FANN
 17. Implement RProp
+18. Ensure that weight initialization with curand does not have race condition.
 
 See [here](http://stackoverflow.com/questions/5810447/cuda-block-and-grid-size-efficiencies) to calculate params for kernels
 

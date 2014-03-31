@@ -87,20 +87,12 @@ __device__ int clamp(float f) {
 
 
 /**
- * Initialize random seeds in CUDA
+ * Initialize random seeds in CUDA, will initalize blocksize seeds
  */
 __global__ void curand_setup(curandState *state) {
 	unsigned int seed = (unsigned int)clock64();
 	int id = threadIdx.x;
 	curand_init(seed, id, 0, &state[id]);
-}
-
-__global__ void curand_setup_v2(int n, curandState *state) {
-	unsigned int id = blockIdx.x * blockDim.x + threadIdx.x;
-	if (id < n) {
-		unsigned int seed = (unsigned int)clock64();
-		curand_init(seed, id, 0, &state[id]);
-	}
 }
 
 /**
@@ -136,7 +128,7 @@ __global__ void init_weights_v2(int n1, int n2, float *weights, curandState *sta
 		float r = 1.0 / sqrt((float)blockDim.x-1);
 		int node_l1 = i % (n1+1);
 		int node_l2 = i % n2;
-		weights[n2*node_l1 + node_l2] = get_random_range(-r, r, n2*node_l1 + node_l2, state);
+		weights[n2*node_l1 + node_l2] = get_random_range(-r, r, threadIdx.x, state);
 	}
 }
 
@@ -694,30 +686,19 @@ void GPUNet::init_net() {
 
 	//init weights to random vals
 	curandState *state;
-	std::cout << "size of curandState: " << sizeof(curandState) << std::endl;
-	CUDA_CHECK_RETURN(cudaMalloc(&state, (n_input+1)*n_hidden*sizeof(curandState)));
-	curand_setup<<<1, (n_input+1)*n_hidden>>>(state);
-	//curand_setup_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>((n_input+1)*n_hidden, state);
+	CUDA_CHECK_RETURN(cudaMalloc(&state, threads*sizeof(curandState)));
+	curand_setup<<<1, threads>>>(state);
 
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-	dim3 ih_threads(n_input+1, n_hidden);
 	init_weights_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(n_input+1, n_hidden, d_ih_weights, state);
-	CUDA_CHECK_RETURN(cudaFree(state));
-
-	CUDA_CHECK_RETURN(cudaMalloc(&state, (n_hidden+1)*n_output*sizeof(curandState)));
-	curand_setup<<<1, (n_hidden+1)*n_output>>>(state);
-	//curand_setup_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>((n_hidden+1)*n_output, state);
-
-	dim3 ho_threads(n_hidden+1, n_output);
 	init_weights_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>(n_hidden+1, n_output, d_ho_weights, state);
+
 	CUDA_CHECK_RETURN(cudaFree(state));
 
 	//init deltas to 0
 	init_deltas_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(n_input+1, n_hidden, d_ih_deltas);
 	init_deltas_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>(n_hidden+1, n_output, d_ho_deltas);
 
-	std::cout << "net initialized" << std::endl;
+	CUDA_CHECK_RETURN(cudaPeekAtLastError());
 }
 
 void GPUNet::set_learning_rate(float lr) {
@@ -945,7 +926,7 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 			++epoch;
 
 			if (epoch % 5 == 0) {
-				std::string fname = "nets/and_" + boost::lexical_cast<std::string>(epoch) + ".net";
+				std::string fname = "nets/trevor_alan_250_" + boost::lexical_cast<std::string>(epoch) + ".net";
 				std::cout << "Writing intermediary net " << fname << std::endl;
 				write_net(fname);
 			}

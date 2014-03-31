@@ -78,10 +78,10 @@ bool NetIO::write_net(std::string fname) {
 
 		if (gnet->net_type == GPUNetSettings::STANDARD) {
 			of << "net_type=" << "STANDARD" << std::endl;
-			std::cout << "Standard type" << std::endl;
+			//std::cout << "Standard type" << std::endl;
 		} else {
 			of << "net_type=" << "GPU_ARCH_OPT" << std::endl;
-			std::cout << "Optimized type" << std::endl;
+			//std::cout << "Optimized type" << std::endl;
 		}
 		of << "num_layers=" << 3 << std::endl;
 		of << "n_layer_0=" << gnet->n_input << std::endl;
