@@ -991,12 +991,12 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 			run_training_epoch_dev(d_training_set, tset->training_set.size());
 			++epoch;
 
-			if (epoch % 5 == 0) {
-				std::string fname = "nets/and_" + boost::lexical_cast<std::string>(epoch) + ".net";
-				std::cout << "Writing intermediary net " << fname << std::endl;
-				write_net(fname);
-				std::cout << "Net written" << std::endl;
-			}
+//			if (epoch % 5 == 0) {
+//				std::string fname = "nets/and_" + boost::lexical_cast<std::string>(epoch) + ".net";
+//				std::cout << "Writing intermediary net " << fname << std::endl;
+//				write_net(fname);
+//				std::cout << "Net written" << std::endl;
+//			}
 		}
 	} else {
 		while (epoch < max_epochs) {

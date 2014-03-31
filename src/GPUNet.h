@@ -22,6 +22,7 @@
 
 #include "Net.h"
 #include "NetData.h"
+#include "NetIO.h"
 #include <time.h>
 #include <string>
 #include <cuda_runtime.h>
@@ -35,7 +36,6 @@ const float GPU_MOMENTUM = 0.9;
 const long GPU_MAX_EPOCHS = 1500;
 const int GPU_DESIRED_ACCURACY = 90;
 const int GPU_DESIRED_MSE = 0.001;
-
 
 class GPUNet {
 
@@ -97,8 +97,8 @@ public:
 	void copy_to_device_host_array_ptrs_biased_section_stream(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv,
 			int p_start, int p_end, bool allocate, cudaStream_t stream);
 
-private:
 
+//private:
 	/*
 	 * State vars
 	 */

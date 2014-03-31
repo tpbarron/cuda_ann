@@ -1,8 +1,8 @@
 /*
  * NetIO.h
  *
- *  Created on: Mar 23, 2014
- *      Author: trevor
+ * Created on: Mar 23, 2014
+ * Author: trevor
  */
 
 #ifndef NETIO_H_
