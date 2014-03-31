@@ -23,6 +23,8 @@
 16. Compare to FANN
 17. Implement RProp
 18. Ensure that weight initialization with curand does not have race condition.
+19. Add batch learning option
+20. Modify for arbitrary number of layers
 
 See [here](http://stackoverflow.com/questions/5810447/cuda-block-and-grid-size-efficiencies) to calculate params for kernels
 
