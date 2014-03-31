@@ -11,51 +11,48 @@
 #include <fstream>
 
 NetIO::NetIO() {
-	epoch = 0, max_epochs = 0;
-	net_type = GPUNetSettings::STANDARD;
-
-	n_input = 0, n_hidden = 0, n_output = 0;
-
-	l_rate = 0, momentum = 0, desired_acc = 0;
-	trainingSetAccuracy = 0, generalizationSetAccuracy = 0, validationSetAccuracy = 0;
-	trainingSetMSE = 0, generalizationSetMSE = 0, validationSetMSE = 0;
-
-	ih_weights = NULL, ho_weights = NULL;
+	gnet = NULL;
 }
 
-NetIO::~NetIO() {
-	delete[] ih_weights;
-	delete[] ho_weights;
-}
+NetIO::~NetIO() {}
 
 bool NetIO::read_net(std::string fname) {
 	std::ifstream in(fname.c_str());
 	if (in.is_open()) {
 		// num epochs
-		epoch = get_next_long(in);
-		max_epochs = get_next_long(in);
-		net_type = (GPUNetSettings::NetworkStructure)get_next_int(in);
+		gnet->epoch = get_next_long(in);
+		get_next_long(in);
+		//gnet->max_epochs = get_next_long(in);
 
+		if (get_next_string(in) == "STANDARD") {
+			gnet->net_type = GPUNetSettings::STANDARD;
+			std::cout << "Loading standard type" << std::endl;
+		} else {
+			gnet->net_type = GPUNetSettings::GPU_ARCH_OPT;
+			std::cout << "Loading optimized type" << std::endl;
+		}
 		//skip n_layers
 		get_next_int(in);
-		n_input = get_next_int(in);
-		n_hidden = get_next_int(in);
-		n_output = get_next_int(in);
+		gnet->n_input = get_next_int(in);
+		gnet->n_hidden = get_next_int(in);
+		gnet->n_output = get_next_int(in);
 
-		l_rate = get_next_float(in);
-		momentum = get_next_float(in);
-		desired_acc = get_next_float(in);
-		trainingSetAccuracy = get_next_float(in);
-		generalizationSetAccuracy = get_next_float(in);
-		validationSetAccuracy = get_next_float(in);
-		trainingSetMSE = get_next_float(in);
-		generalizationSetMSE = get_next_float(in);
-		validationSetMSE = get_next_float(in);
+		gnet->alloc_dev_mem();
 
-		ih_weights = get_next_list(in);
-		ho_weights = get_next_list(in);
+		gnet->l_rate = get_next_float(in);
+		gnet->momentum = get_next_float(in);
+		gnet->desired_acc = get_next_float(in);
+		gnet->trainingSetAccuracy = get_next_float(in);
+		gnet->generalizationSetAccuracy = get_next_float(in);
+		gnet->validationSetAccuracy = get_next_float(in);
+		gnet->trainingSetMSE = get_next_float(in);
+		gnet->generalizationSetMSE = get_next_float(in);
+		gnet->validationSetMSE = get_next_float(in);
 
-		std::cout << "NetIO: Closing file" <<std::endl;
+		// get weights
+		CUDA_CHECK_RETURN(cudaMemcpy(gnet->d_ih_weights, get_next_list(in), (gnet->n_input+1)*gnet->n_hidden*sizeof(float), cudaMemcpyHostToDevice));
+		CUDA_CHECK_RETURN(cudaMemcpy(gnet->d_ho_weights, get_next_list(in), (gnet->n_hidden+1)*gnet->n_output*sizeof(float), cudaMemcpyHostToDevice));
+
 		in.close();
 	} else {
 		std::cerr << "NetIO: Could not read net file!" << std::endl;
@@ -68,50 +65,54 @@ bool NetIO::read_net(std::string fname) {
 /*
  * transfer weights back to host
  * write important data (num_epochs, layers, nodes/layer, l_rate, momentum, max_epochs, desired_acc, current mse, current acc)
- *
  */
 bool NetIO::write_net(std::string fname) {
-	std::cout << "NetIO: name=" << fname << std::endl;
 	std::ofstream of(fname.c_str());
-	std::cout << "NetIO: Is good: " << of.good() << std::endl;
-	std::cout << "NetIO: ofstream initialized" <<std::endl;
 
 	if (of.is_open()) {
-		std::cout << "NetIO: file open" << std::endl;
+		CUDA_CHECK_RETURN(cudaMemcpy(gnet->h_ih_weights, gnet->d_ih_weights, (gnet->n_input+1)*(gnet->n_hidden)*sizeof(float), cudaMemcpyDeviceToHost));
+		CUDA_CHECK_RETURN(cudaMemcpy(gnet->h_ho_weights, gnet->d_ho_weights, (gnet->n_hidden+1)*(gnet->n_output)*sizeof(float), cudaMemcpyDeviceToHost));
 
-		of << "num_epochs=" << epoch << std::endl;
-		of << "max_epochs=" << max_epochs << std::endl;
-		of << "net_type=" << net_type << std::endl;
+		of << "num_epochs=" << gnet->epoch << std::endl;
+		of << "max_epochs=" << gnet->max_epochs << std::endl;
+
+		if (gnet->net_type == GPUNetSettings::STANDARD) {
+			of << "net_type=" << "STANDARD" << std::endl;
+			std::cout << "Standard type" << std::endl;
+		} else {
+			of << "net_type=" << "GPU_ARCH_OPT" << std::endl;
+			std::cout << "Optimized type" << std::endl;
+		}
 		of << "num_layers=" << 3 << std::endl;
-		of << "n_layer_0=" << n_input << std::endl;
-		of << "n_layer_1=" << n_hidden << std::endl;
-		of << "n_layer_2=" << n_output << std::endl;
-		of << "l_rate=" << l_rate << std::endl;
-		of << "momentum=" << momentum << std::endl;
-		of << "desired_acc=" << desired_acc << std::endl;
-		of << "tset_acc=" << trainingSetAccuracy << std::endl;
-		of << "gset_acc=" << generalizationSetAccuracy << std::endl;
-		of << "vset_acc=" << validationSetAccuracy << std::endl;
-		of << "tset_mse=" << trainingSetMSE << std::endl;
-		of << "gset_mse=" << generalizationSetMSE << std::endl;
-		of << "vset_mse=" << validationSetMSE << std::endl;
+		of << "n_layer_0=" << gnet->n_input << std::endl;
+		of << "n_layer_1=" << gnet->n_hidden << std::endl;
+		of << "n_layer_2=" << gnet->n_output << std::endl;
+		of << "l_rate=" << gnet->l_rate << std::endl;
+		of << "momentum=" << gnet->momentum << std::endl;
+		of << "desired_acc=" << gnet->desired_acc << std::endl;
+		of << "tset_acc=" << gnet->trainingSetAccuracy << std::endl;
+		of << "gset_acc=" << gnet->generalizationSetAccuracy << std::endl;
+		of << "vset_acc=" << gnet->validationSetAccuracy << std::endl;
+		of << "tset_mse=" << gnet->trainingSetMSE << std::endl;
+		of << "gset_mse=" << gnet->generalizationSetMSE << std::endl;
+		of << "vset_mse=" << gnet->validationSetMSE << std::endl;
+
 		of << "weights_ih=";
-		for (int i = 0, l = (n_input+1)*n_hidden; i < l; ++i) {
-			of << ih_weights[i];
+		for (int i = 0, l = (gnet->n_input+1)*gnet->n_hidden; i < l; ++i) {
+			of << gnet->h_ih_weights[i];
 			if (i != l-1)
 				of << ",";
 		}
 		of << std::endl;
 		of << "weights_ho=";
-		for (int i = 0, l = (n_hidden+1)*n_output; i < l; ++i) {
-			of << ho_weights[i];
+		for (int i = 0, l = (gnet->n_hidden+1)*gnet->n_output; i < l; ++i) {
+			of << gnet->h_ho_weights[i];
 			if (i != l-1)
 				of << ",";
 		}
 
 		of.flush();
 		of.close();
-		std::cout << "NetIO: Closed file" <<std::endl;
 	} else {
 		std::cerr << "NetIO: Could not write file!" << std::endl;
 		return false;
@@ -119,6 +120,18 @@ bool NetIO::write_net(std::string fname) {
 	return true;
 }
 
+
+void NetIO::set_gnet(GPUNet *g) {
+	gnet = g;
+}
+
+std::string NetIO::get_next_string(std::ifstream &in) {
+	std::string line;
+	std::getline(in, line);
+	std::vector<std::string> res;
+	boost::split(res, line, boost::is_any_of("="));
+	return res[1];
+}
 
 int NetIO::get_next_int(std::ifstream &in) {
 	std::string line;

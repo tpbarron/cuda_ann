@@ -534,6 +534,7 @@ GPUNet::~GPUNet() {
 
 	delete[] h_output;
 	delete[] gpu_mem;
+	delete nio;
 }
 
 /*
@@ -561,6 +562,9 @@ void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNetSettings::Ne
 }
 
 void GPUNet::init_vars() {
+	nio = new NetIO();
+	nio->set_gnet(this);
+
 	max_epochs = GPUNetSettings::GPU_MAX_EPOCHS;
 	l_rate = GPUNetSettings::GPU_LEARNING_RATE;
 	momentum = GPUNetSettings::GPU_MOMENTUM;
@@ -611,9 +615,6 @@ void GPUNet::init_vars() {
 	//init gpu mem to 0 for each gpu
 	gpu_mem = new size_t[n_gpus];
 	memset(gpu_mem, 0, n_gpus*sizeof(size_t));
-	//for (int i = 0; i < n_gpus; ++i) {
-	//	gpu_mem[i] = 0;
-	//}
 }
 
 
@@ -762,66 +763,18 @@ void GPUNet::print_net() {
  *
  */
 bool GPUNet::write_net(std::string fname) {
-	CUDA_CHECK_RETURN(cudaMemcpy(h_ih_weights, d_ih_weights, (n_input+1)*(n_hidden)*sizeof(float), cudaMemcpyDeviceToHost));
-	CUDA_CHECK_RETURN(cudaMemcpy(h_ho_weights, d_ho_weights, (n_hidden+1)*(n_output)*sizeof(float), cudaMemcpyDeviceToHost));
-
-	NetIO nio;
-	nio.epoch = epoch;
-	nio.max_epochs = max_epochs;
-	nio.net_type = net_type;
-	nio.n_input = n_input;
-	nio.n_hidden = n_hidden;
-	nio.n_output = n_output;
-	nio.l_rate = l_rate;
-	nio.momentum = momentum;
-	nio.desired_acc = desired_acc;
-	nio.trainingSetAccuracy = trainingSetAccuracy;
-	nio.generalizationSetAccuracy = generalizationSetAccuracy;
-	nio.validationSetAccuracy = validationSetAccuracy;
-	nio.trainingSetMSE = trainingSetMSE;
-	nio.generalizationSetMSE = generalizationSetMSE;
-	nio.validationSetMSE = validationSetMSE;
-	nio.ih_weights = h_ih_weights;
-	nio.ho_weights = h_ho_weights;
-
-	std::cout << "calling nio.write" <<std::endl;
-
-	if (!nio.write_net(fname)) {
+	if (!nio->write_net(fname)) {
 		std::cerr << "Write failed" << std::endl;
 		return false;
 	}
-
 	return true;
 }
 
 bool GPUNet::read_net(std::string fname) {
-	NetIO nio;
-	if (!nio.read_net(fname)) {
+	if (!nio->read_net(fname)) {
 		std::cerr << "Read failed" << std::endl;
 		return false;
 	}
-	epoch = nio.epoch;
-	//max_epochs = nio.max_epochs;
-	net_type = nio.net_type;
-
-	n_input = nio.n_input;
-	n_hidden = nio.n_hidden;
-	n_output = nio.n_output;
-	//now know network size, so allocate
-	alloc_dev_mem();
-
-	l_rate = nio.l_rate;
-	momentum = nio.momentum;
-	desired_acc = nio.desired_acc;
-	trainingSetAccuracy = nio.trainingSetAccuracy;
-	generalizationSetAccuracy = nio.generalizationSetAccuracy;
-	validationSetAccuracy = nio.validationSetAccuracy;
-	trainingSetMSE = nio.trainingSetMSE;
-	generalizationSetMSE = nio.generalizationSetMSE;
-	validationSetMSE = nio.validationSetMSE;
-
-	CUDA_CHECK_RETURN(cudaMemcpy(d_ih_weights, nio.ih_weights, (n_input+1)*n_hidden*sizeof(float), cudaMemcpyHostToDevice));
-	CUDA_CHECK_RETURN(cudaMemcpy(d_ho_weights, nio.ho_weights, (n_hidden+1)*n_output*sizeof(float), cudaMemcpyHostToDevice));
 
 	int threads = 128;
 	//init nodes to 0
@@ -991,12 +944,11 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 			run_training_epoch_dev(d_training_set, tset->training_set.size());
 			++epoch;
 
-//			if (epoch % 5 == 0) {
-//				std::string fname = "nets/and_" + boost::lexical_cast<std::string>(epoch) + ".net";
-//				std::cout << "Writing intermediary net " << fname << std::endl;
-//				write_net(fname);
-//				std::cout << "Net written" << std::endl;
-//			}
+			if (epoch % 5 == 0) {
+				std::string fname = "nets/and_" + boost::lexical_cast<std::string>(epoch) + ".net";
+				std::cout << "Writing intermediary net " << fname << std::endl;
+				write_net(fname);
+			}
 		}
 	} else {
 		while (epoch < max_epochs) {

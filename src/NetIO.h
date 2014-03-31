@@ -12,6 +12,7 @@
 #include "GPUNetSettings.h"
 #include <string>
 
+class GPUNet;
 class NetIO {
 public:
 	NetIO();
@@ -19,19 +20,12 @@ public:
 
 	bool read_net(std::string fname);
 	bool write_net(std::string fname);
-
-	long epoch, max_epochs;
-	GPUNetSettings::NetworkStructure net_type;
-
-	int n_input, n_hidden, n_output;
-
-	float l_rate, momentum, desired_acc;
-	float trainingSetAccuracy, generalizationSetAccuracy, validationSetAccuracy;
-	float trainingSetMSE, generalizationSetMSE, validationSetMSE;
-
-	float *ih_weights, *ho_weights;
+	void set_gnet(GPUNet *g);
 
 private:
+	GPUNet *gnet;
+
+	std::string get_next_string(std::ifstream &in);
 	int get_next_int(std::ifstream &in);
 	long get_next_long(std::ifstream &in);
 	float get_next_float(std::ifstream &in);

@@ -31,7 +31,7 @@
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 
-
+class NetIO;
 class GPUNet {
 
 public:
@@ -89,6 +89,9 @@ public:
 
 
 //private:
+
+	NetIO *nio;
+
 	/*
 	 * State vars
 	 */

@@ -4,6 +4,7 @@
 #include "NetData.h"
 #include "Net.h"
 #include "GPUNet.h"
+#include "GPUNetSettings.h"
 #include "NetTrainer.h"
 #include "Profiler.h"
 #include <boost/lexical_cast.hpp>
@@ -55,14 +56,14 @@ int main(void) {
 	time_t start, stop;
 
 	NetData d;
-	if (!d.load_file("datasets/trevor_alan.dat.norm"))
+	if (!d.load_file("datasets/and.dat"))
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
 
-//	Net net(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
-//	GPUNet gnet(d.num_inputs(), d.num_targets(), STANDARD);
-//	gnet.alloc_dev_mem();
-//	gnet.init_from_net(net, d);
+	Net net(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
+	GPUNet gnet(d.num_inputs(), d.num_targets(), GPUNetSettings::STANDARD);
+	gnet.alloc_dev_mem();
+	gnet.init_from_net(net, d);
 
 //	gnet.init_net();
 //	gnet.print_net();
@@ -73,16 +74,16 @@ int main(void) {
 //	gnet.run_parallel(net, d);
 //	return 0;
 
-	GPUNet gnet("nets/trevor_alan.net");
+//	GPUNet gnet("nets/and2.net");
 
 	gnet.set_training_params(0.9, 0.9);
-	gnet.set_stopping_conds(20, 95.0);
+	gnet.set_stopping_conds(100, 95.0);
 	start = clock();
 	gnet.train_net_sectioned(d.get_training_dataset());
 	stop = clock();
 	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 	//gnet.print_net();
-	gnet.write_net("nets/trevor_alan2.net");
+	gnet.write_net("nets/and_final.net");
 
 
 //	NetTrainer nt(&net);
