@@ -23,6 +23,7 @@
 #include "Net.h"
 #include "NetData.h"
 #include "NetIO.h"
+#include "GPUNetSettings.h"
 #include <time.h>
 #include <string>
 #include <cuda_runtime.h>
@@ -30,27 +31,16 @@
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 
-//defaults
-const float GPU_LEARNING_RATE = 0.7;
-const float GPU_MOMENTUM = 0.9;
-const long GPU_MAX_EPOCHS = 1500;
-const int GPU_DESIRED_ACCURACY = 90;
-const int GPU_DESIRED_MSE = 0.001;
 
 class GPUNet {
 
 public:
 
-	enum NetworkStructure {
-		STANDARD = 0,
-		GPU_ARCH_OPT = 1
-	};
-
-	GPUNet(int ni, int no, GPUNet::NetworkStructure net_type);
+	GPUNet(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type);
 	GPUNet(std::string net_file);
 	~GPUNet();
 
-	void init_structure(unsigned int ni, unsigned int no, GPUNet::NetworkStructure net_type);
+	void init_structure(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type);
 	void init_vars();
 	void alloc_dev_mem();
 	void init_from_net(Net &net, NetData &d);
@@ -104,7 +94,7 @@ public:
 	 */
 	int n_gpus;
 	size_t *gpu_mem;
-	NetworkStructure net_type;
+	GPUNetSettings::NetworkStructure net_type;
 	int n_copyable_patterns;
 	int n_sections;
 

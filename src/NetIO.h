@@ -9,6 +9,7 @@
 #define NETIO_H_
 
 #include "GPUNet.h"
+#include "GPUNetSettings.h"
 #include <string>
 
 class NetIO {
@@ -19,9 +20,8 @@ public:
 	bool read_net(std::string fname);
 	bool write_net(std::string fname);
 
-
 	long epoch, max_epochs;
-	GPUNet::NetworkStructure net_type;
+	GPUNetSettings::NetworkStructure net_type;
 
 	int n_input, n_hidden, n_output;
 

@@ -502,7 +502,7 @@ __global__ void print_input(int n_input, float *input) {
  * ---------- Constructors -------------
  */
 
-GPUNet::GPUNet(int ni, int no, GPUNet::NetworkStructure net_type=STANDARD) {
+GPUNet::GPUNet(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type=GPUNetSettings::STANDARD) {
 	n_input = 0;
 	GPUNet::init_structure(ni, no, net_type);
 	GPUNet::init_vars();
@@ -541,16 +541,16 @@ GPUNet::~GPUNet() {
  */
 
 
-void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNet::NetworkStructure net_type) {
+void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type) {
 	if (n_input != 0) { // constructor initializing nodes has been called, error out
 		std::cerr << "Network has already been initialized" << std::endl;
 	} else if (ni != 0) { // if not empty constructor
 		n_input = ni;
 		n_output = no;
 		GPUNet::net_type = net_type;
-		if (net_type == GPUNet::STANDARD) {
+		if (net_type == GPUNetSettings::STANDARD) {
 			n_hidden = ceil(2.0/3.0*ni);
-		} else if (net_type == GPU_ARCH_OPT) {
+		} else if (net_type == GPUNetSettings::GPU_ARCH_OPT) {
 			//get first multiple of 128 greater than 2.0/3.0*ni
 			n_hidden = (2.0/3.0*ni+127) / 128 * 128;
 		} else {
@@ -561,10 +561,10 @@ void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNet::NetworkStr
 }
 
 void GPUNet::init_vars() {
-	max_epochs = GPU_MAX_EPOCHS;
-	l_rate = GPU_LEARNING_RATE;
-	momentum = GPU_MOMENTUM;
-	desired_acc = GPU_DESIRED_ACCURACY;
+	max_epochs = GPUNetSettings::GPU_MAX_EPOCHS;
+	l_rate = GPUNetSettings::GPU_LEARNING_RATE;
+	momentum = GPUNetSettings::GPU_MOMENTUM;
+	desired_acc = GPUNetSettings::GPU_DESIRED_ACCURACY;
 	CUDA_CHECK_RETURN(cudaGetDeviceCount(&n_gpus));
 
 	epoch = 0;

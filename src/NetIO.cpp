@@ -12,7 +12,7 @@
 
 NetIO::NetIO() {
 	epoch = 0, max_epochs = 0;
-	net_type = GPUNet::STANDARD;
+	net_type = GPUNetSettings::STANDARD;
 
 	n_input = 0, n_hidden = 0, n_output = 0;
 
@@ -34,7 +34,7 @@ bool NetIO::read_net(std::string fname) {
 		// num epochs
 		epoch = get_next_long(in);
 		max_epochs = get_next_long(in);
-		net_type = (GPUNet::NetworkStructure)get_next_int(in);
+		net_type = (GPUNetSettings::NetworkStructure)get_next_int(in);
 
 		//skip n_layers
 		get_next_int(in);

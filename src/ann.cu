@@ -59,10 +59,10 @@ int main(void) {
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
 
-	Net net(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
-	GPUNet gnet(d.num_inputs(), d.num_targets(), GPUNet::STANDARD);
-	gnet.alloc_dev_mem();
-	gnet.init_from_net(net, d);
+//	Net net(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
+//	GPUNet gnet(d.num_inputs(), d.num_targets(), STANDARD);
+//	gnet.alloc_dev_mem();
+//	gnet.init_from_net(net, d);
 
 //	gnet.init_net();
 //	gnet.print_net();
