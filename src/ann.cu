@@ -77,6 +77,7 @@ int main(void) {
 
 //	GPUNet gnet("nets/and2.net");
 
+	gnet.set_save_frequency(5);
 	gnet.set_training_params(0.9, 0.9, false);
 	gnet.set_stopping_conds(25, 95.0);
 	start = clock();
