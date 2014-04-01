@@ -25,6 +25,8 @@ namespace GPUNetSettings {
 	const int GPU_SAVE_FREQUENCY = 5;
 	const bool GPU_USE_BATCH = false;
 
+	const int GPU_DEFAULT_BLOCK_SIZE = 128;
+
 }
 
 #endif /* GPUNETSETTINGS_H_ */

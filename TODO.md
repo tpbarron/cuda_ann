@@ -29,4 +29,4 @@
 21. Calculate optimal block and grid sizes -- See [here](http://stackoverflow.com/questions/5810447/cuda-block-and-grid-size-efficiencies) to calculate params for kernels. Make threads a class field in some way so not defined as 128 in every function.
 22. Add feature selection to dataset processor
 23. Modify cuda_ann for command line input
-
+24. Analyze kernels for memory coalescing. Change array indexing if necessary.

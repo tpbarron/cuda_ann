@@ -70,9 +70,11 @@ bool NetIO::write_net(std::string fname) {
 	std::ofstream of(fname.c_str());
 
 	if (of.is_open()) {
+		std::cout << "file is open" <<std::endl;
 		CUDA_CHECK_RETURN(cudaMemcpy(gnet->h_ih_weights, gnet->d_ih_weights, (gnet->n_input+1)*(gnet->n_hidden)*sizeof(float), cudaMemcpyDeviceToHost));
 		CUDA_CHECK_RETURN(cudaMemcpy(gnet->h_ho_weights, gnet->d_ho_weights, (gnet->n_hidden+1)*(gnet->n_output)*sizeof(float), cudaMemcpyDeviceToHost));
 
+		std::cout << "weights copied"<<std::endl;
 		of << "num_epochs=" << gnet->epoch << std::endl;
 		of << "max_epochs=" << gnet->max_epochs << std::endl;
 
@@ -103,6 +105,8 @@ bool NetIO::write_net(std::string fname) {
 		of << "gset_mse=" << gnet->generalizationSetMSE << std::endl;
 		of << "vset_mse=" << gnet->validationSetMSE << std::endl;
 
+		std::cout << "starting to write weights"<<std::endl;
+
 		of << "weights_ih=";
 		for (int i = 0, l = (gnet->n_input+1)*gnet->n_hidden; i < l; ++i) {
 			of << gnet->h_ih_weights[i];
@@ -116,6 +120,8 @@ bool NetIO::write_net(std::string fname) {
 			if (i != l-1)
 				of << ",";
 		}
+
+		std::cout << "finished writing weights"<<std::endl;
 
 		of.flush();
 		of.close();

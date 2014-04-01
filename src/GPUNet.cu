@@ -507,6 +507,8 @@ GPUNet::GPUNet(std::string net_file) {
 	std::cout << "Initializing from net file: " << net_file << "." << std::endl;
 	init_vars();
 	read_net(net_file);
+
+	std::cout << "init mse=" << trainingSetMSE << std::endl;
 }
 
 GPUNet::~GPUNet() {
@@ -521,11 +523,15 @@ GPUNet::~GPUNet() {
 	cudaFree(d_hid_err_gradients);
 	cudaFree(d_out_err_gradients);
 
+	/*
+	//I'm getting a bad resource handle error at this line
 	CUDA_CHECK_RETURN(cudaStreamDestroy(err_calc_stream));
-	CUDA_CHECK_RETURN(cudaStreamDestroy(weight_update_stream));
+	CUDA_CHECK_RETURN(cudaStreamDestroy(weight_update_stream1));
+	CUDA_CHECK_RETURN(cudaStreamDestroy(weight_update_stream2));
 	CUDA_CHECK_RETURN(cudaStreamDestroy(train_stream1));
 	CUDA_CHECK_RETURN(cudaStreamDestroy(train_stream2));
 	CUDA_CHECK_RETURN(cudaEventDestroy(event1));
+	CUDA_CHECK_RETURN(cudaEventDestroy(event2));*/
 
 	delete[] h_output;
 	delete[] h_ih_weights;
@@ -599,10 +605,12 @@ void GPUNet::init_vars() {
 	d_out_err_gradients = NULL;
 
 	CUDA_CHECK_RETURN(cudaStreamCreate(&err_calc_stream));
-	CUDA_CHECK_RETURN(cudaStreamCreate(&weight_update_stream));
+	CUDA_CHECK_RETURN(cudaStreamCreate(&weight_update_stream1));
+	CUDA_CHECK_RETURN(cudaStreamCreate(&weight_update_stream2));
 	CUDA_CHECK_RETURN(cudaStreamCreate(&train_stream1));
 	CUDA_CHECK_RETURN(cudaStreamCreate(&train_stream2));
 	CUDA_CHECK_RETURN(cudaEventCreate(&event1));
+	CUDA_CHECK_RETURN(cudaEventCreate(&event2));
 
 	/*
 	 * host validation
@@ -841,15 +849,15 @@ void GPUNet::calc_dataset_parameters(TrainingDataSet *tset) {
 	std::cout << " available mem = "<<available_mem<<std::endl;
 	std::cout << " tset.size = "<<tset->size()<<std::endl;
 	n_copyable_patterns = available_mem / bytes_per_pattern;
-	if (n_copyable_patterns > tset->size()) {
-		n_copyable_patterns = tset->size();
-	}
 
-	//ensure n_copyable_patterns is odd
+	//ensure n_copyable_patterns is even and can be split into 2 buffers
 	if (n_copyable_patterns % 2 == 1) {
 		--n_copyable_patterns;
 	}
 
+	if (n_copyable_patterns > tset->size()) {
+		n_copyable_patterns = tset->size();
+	}
 	// calc num sections
 	// num_sections = ceil ( n_patterns / n_copyable_patterns)
 	n_sections = (tset->size() + n_copyable_patterns - 1) / n_copyable_patterns;
@@ -936,14 +944,16 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 	if (n_sections == 1) { // no section copying necessary
 		copy_to_device_host_array_ptrs_biased(tset->training_set, &d_training_set);
 		while (epoch < max_epochs) {
-			std::cout << "Epoch: " << epoch << std::endl;
+			std::cout << "Epoch: " << epoch << ", ";
 			run_training_epoch_dev(d_training_set, tset->training_set.size());
 			++epoch;
 
 			if (epoch % save_freq == 0) {
-				std::string fname = "nets/trevor_alan_250_" + boost::lexical_cast<std::string>(epoch) + ".net";
+				std::cout << "starting save" << std::endl;
+				std::string fname = "nets/face_" + boost::lexical_cast<std::string>(epoch) + ".net";
 				std::cout << "Writing intermediary net " << fname << std::endl;
 				write_net(fname);
+				std::cout << "finished save" << std::endl;
 			}
 		}
 	} else {
@@ -997,17 +1007,13 @@ void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_featu
 		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	}
 	if (batching) { //update weights here and reset deltas
-		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas, true);
-		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, true);
+		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream1>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas, true);
+		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, true);
 	}
-	calc_mse<<<1, 1, 0, err_calc_stream>>>(n_output, n_features);
-	calc_acc<<<1, 1, 0, err_calc_stream>>>(n_features);
+	calc_mse<<<1, 1>>>(n_output, n_features);
+	calc_acc<<<1, 1>>>(n_features);
 	finish = clock();
-	std::cout << "Epoch time: " << ((double)finish-start)/CLOCKS_PER_SEC << std::endl;
-	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	//float mse = 0;
-	//CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse, d_mse, sizeof(float), 0, cudaMemcpyDeviceToHost));
-	//std::cout << "Current mse = " << mse << std::endl;
+	std::cout << "time: " << ((double)finish-start)/CLOCKS_PER_SEC << std::endl;
 }
 
 
@@ -1023,33 +1029,108 @@ void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
 	//CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse_sum, d_mse_sum, sizeof(float), 0, cudaMemcpyDeviceToHost));
 	//std::cout << "Current mse_sum = " << mse_sum << std::endl;
 
-	output_error_gradients_v2<<<(n_output+n_threads-1)/n_threads, n_threads>>>(d_output, d_tar, d_out_err_gradients, n_output);
+	output_error_gradients_v2<<<(n_output+n_threads-1)/n_threads, n_threads, 0, 0>>>(d_output, d_tar, d_out_err_gradients, n_output);
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-	update_hidden_output_deltas_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads>>>(n_hidden, n_output, l_rate, momentum, d_hidden, d_out_err_gradients, d_ho_deltas);
+	update_hidden_output_deltas_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, 0>>>(n_hidden, n_output, l_rate, momentum, d_hidden, d_out_err_gradients, d_ho_deltas);
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-	hidden_error_gradients_v2<<<(n_hidden+n_threads-1)/n_threads, n_threads>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+	hidden_error_gradients_v2<<<(n_hidden+n_threads-1)/n_threads, n_threads, 0, 0>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
 	if (!batching) { // don't update weights here
 		CUDA_CHECK_RETURN(cudaEventRecord(event1));
-		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream, event1, 0));
-		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas, false);
+		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream1, event1, 0));
+		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream1>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas, false);
 	}
 
-	update_input_hidden_deltas_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads>>>(n_input, n_hidden, l_rate, momentum,
+	update_input_hidden_deltas_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, 0>>>(n_input, n_hidden, l_rate, momentum,
 			d_inp, d_hid_err_gradients, d_ih_deltas);
 
 	if (!batching) { // don't update weights here
-		CUDA_CHECK_RETURN(cudaEventRecord(event1));
-		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream, event1, 0));
-		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
+		CUDA_CHECK_RETURN(cudaEventRecord(event2));
+		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream2, event2, 0));
+
+//		int n_streams = 4;
+//		cudaStream_t *streams = (cudaStream_t*)malloc(n_streams*sizeof(cudaStream_t));
+//
+//		for (int i = 0; i < n_streams; ++i) {
+//			CUDA_CHECK_RETURN(cudaStreamCreate(&streams[i]));
+//			update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, streams[i]>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
+//		}
+//
+		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
+//		for (int i = 0; i < n_streams; ++i) {
+//			CUDA_CHECK_RETURN(cudaStreamDestroy(streams[i]));
+//		}
+	}
+}
+
+
+/*
+ * called generically, pow of 2 threads
+ */
+__global__ void output_error_gradients_rprop(float* output, float* target, float* output_err_gradients, float* output_err_gradients_tmp, int no) {
+	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
+
+	if (i < no) {
+		output_err_gradients_tmp[i] = output_err_gradients[i];
+		output_err_gradients[i] = calc_output_gradient(output[i], target[i]);
+		//printf("out_err_grad[%d] = %f, output = %f, target = %f\n", i, output_err_gradients[i], output[i], target[i]);
+	}
+}
+
+
+__device__ float max(float f1, float f2) {
+	if (f1 > f2) {
+		return f1;
+	}
+	return f2;
+}
+
+__device__ float min(float f1, float f2) {
+	if (f1 < f2) {
+		return f1;
+	}
+	return f2;
+}
+__global__ void update_hidden_output_deltas_rprop(int nh, int no, float step_p, float step_m, float d_max, float d_min,
+		float* hidden, float* output_err_gradients, float* output_err_gradients_tmp, float* delta_ho) {
+
+	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
+
+	if (x < (nh+1)*no) { // if in range
+		int j = x % (nh+1); //input node
+		int k = x % no; //hidden node
+
+		int r = output_err_gradients[i] * output_err_gradients_tmp[i];
+		if (r > 0) {
+			delta_ho[no*j + k] = min(delta_ho[no*j + k] * step_p, d_max);
+		} else if (r < 0) {
+			delta_ho[no*j + k] = max(delta_ho[no*j + k] * step_m, d_min);
+		} else {
+			//TODO: need something here for start when delta = 0
+		}
+	}
+}
+
+__global__ void update_weights_rprop(int n1, int n2, float *d_weights, float* gradients, float *deltas) {
+	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
+
+	if (x < (n1+1)*n2) {
+		int i = x % (n1+1); //layer 1 node, NOTE: same bug
+		int j = x % n2; //layer 2 node
+
+		int sign = (gradients[j] > 0) - (gradients[j] < 0);
+		d_weights[i*n2 + j] = d_weights[i*n2 + j] - sign*deltas[i*n2 + j];
 	}
 }
 
 void GPUNet::rprop(float *d_inp, float *d_tar) {
+	int n_threads = 128;
+	//calc hidden out gradients
+	//
 
 }
 
