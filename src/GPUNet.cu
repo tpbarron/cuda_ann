@@ -424,11 +424,6 @@ __global__ void update_input_hidden_deltas_v2(int ni, int nh, float l_rate, floa
 }
 
 
-
-/*
- * weight update
- */
-
 /*
  * called generically with power of 2 threads
  */
@@ -446,6 +441,65 @@ __global__ void update_weights_v2(int n1, int n2, float *d_weights, float *delta
 			deltas[i*n2 + j] = 0;
 	}
 }
+
+
+/*
+ *
+ * ------- RProp Kernels -----------
+ *
+ */
+
+/*
+ * called generically, pow of 2 threads
+ */
+__global__ void output_error_gradients_rprop(float* output, float* target, float* output_err_gradients, float* output_err_gradients_tmp, int no) {
+	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
+
+	if (i < no) {
+		output_err_gradients_tmp[i] = output_err_gradients[i];
+		output_err_gradients[i] = calc_output_gradient(output[i], target[i]);
+		//printf("out_err_grad[%d] = %f, output = %f, target = %f\n", i, output_err_gradients[i], output[i], target[i]);
+	}
+}
+
+__global__ void update_hidden_output_deltas_rprop(int nh, int no, float step_p, float step_m, float d_max, float d_min,
+		float* hidden, float* output_err_gradients, float* output_err_gradients_tmp, float* delta_ho) {
+
+	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
+
+	if (x < (nh+1)*no) { // if in range
+		int j = x % (nh+1); //input node
+		int k = x % no; //hidden node
+
+		int r = output_err_gradients[x] * output_err_gradients_tmp[x];
+		if (r > 0) {
+			delta_ho[no*j + k] = min(delta_ho[no*j + k] * step_p, d_max);
+		} else if (r < 0) {
+			delta_ho[no*j + k] = max(delta_ho[no*j + k] * step_m, d_min);
+		} else {
+			//TODO: need something here for start when delta = 0
+		}
+	}
+}
+
+__global__ void update_weights_rprop(int n1, int n2, float *d_weights, float* gradients, float *deltas) {
+	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
+
+	if (x < (n1+1)*n2) {
+		int i = x % (n1+1); //layer 1 node, NOTE: same bug
+		int j = x % n2; //layer 2 node
+
+		int sign = (gradients[j] > 0) - (gradients[j] < 0);
+		d_weights[i*n2 + j] = d_weights[i*n2 + j] - sign*deltas[i*n2 + j];
+	}
+}
+
+
+/*
+ *
+ * --------- Debugging ------------
+ *
+ */
 
 __global__ void print_gpu_net(int n_input, int n_hidden, int n_output,
 		float *input, float *hidden, float *output, float *ih_weights, float *ho_weights) {
@@ -475,11 +529,6 @@ __global__ void print_gpu_net(int n_input, int n_hidden, int n_output,
 	printf("\n");
 }
 
-/*
- *
- * --------- Debugging ------------
- *
- */
 
 __global__ void print_target(int n_output, float *target) {
 	for (int i = 0; i < n_output; ++i) {
@@ -1067,65 +1116,6 @@ void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
 	}
 }
 
-
-/*
- * called generically, pow of 2 threads
- */
-__global__ void output_error_gradients_rprop(float* output, float* target, float* output_err_gradients, float* output_err_gradients_tmp, int no) {
-	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
-
-	if (i < no) {
-		output_err_gradients_tmp[i] = output_err_gradients[i];
-		output_err_gradients[i] = calc_output_gradient(output[i], target[i]);
-		//printf("out_err_grad[%d] = %f, output = %f, target = %f\n", i, output_err_gradients[i], output[i], target[i]);
-	}
-}
-
-
-__device__ float max(float f1, float f2) {
-	if (f1 > f2) {
-		return f1;
-	}
-	return f2;
-}
-
-__device__ float min(float f1, float f2) {
-	if (f1 < f2) {
-		return f1;
-	}
-	return f2;
-}
-__global__ void update_hidden_output_deltas_rprop(int nh, int no, float step_p, float step_m, float d_max, float d_min,
-		float* hidden, float* output_err_gradients, float* output_err_gradients_tmp, float* delta_ho) {
-
-	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
-
-	if (x < (nh+1)*no) { // if in range
-		int j = x % (nh+1); //input node
-		int k = x % no; //hidden node
-
-		int r = output_err_gradients[i] * output_err_gradients_tmp[i];
-		if (r > 0) {
-			delta_ho[no*j + k] = min(delta_ho[no*j + k] * step_p, d_max);
-		} else if (r < 0) {
-			delta_ho[no*j + k] = max(delta_ho[no*j + k] * step_m, d_min);
-		} else {
-			//TODO: need something here for start when delta = 0
-		}
-	}
-}
-
-__global__ void update_weights_rprop(int n1, int n2, float *d_weights, float* gradients, float *deltas) {
-	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
-
-	if (x < (n1+1)*n2) {
-		int i = x % (n1+1); //layer 1 node, NOTE: same bug
-		int j = x % n2; //layer 2 node
-
-		int sign = (gradients[j] > 0) - (gradients[j] < 0);
-		d_weights[i*n2 + j] = d_weights[i*n2 + j] - sign*deltas[i*n2 + j];
-	}
-}
 
 void GPUNet::rprop(float *d_inp, float *d_tar) {
 	int n_threads = 128;
