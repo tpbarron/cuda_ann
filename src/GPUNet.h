@@ -109,7 +109,7 @@ public:
 	/*
 	 * GPU state
 	 */
-	cudaStream_t err_calc_stream, weight_update_stream1, weight_update_stream2, train_stream1, train_stream2;
+	cudaStream_t bprop_stream, err_calc_stream, weight_update_stream1, weight_update_stream2, train_stream1, train_stream2;
 	cudaEvent_t event1, event2;
 
 	/*

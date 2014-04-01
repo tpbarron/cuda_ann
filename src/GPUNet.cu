@@ -574,6 +574,7 @@ GPUNet::~GPUNet() {
 
 	/*
 	//I'm getting a bad resource handle error at this line
+	CUDA_CHECK_RETURN(cudaStreamDestroy(bprop_stream));
 	CUDA_CHECK_RETURN(cudaStreamDestroy(err_calc_stream));
 	CUDA_CHECK_RETURN(cudaStreamDestroy(weight_update_stream1));
 	CUDA_CHECK_RETURN(cudaStreamDestroy(weight_update_stream2));
@@ -653,6 +654,7 @@ void GPUNet::init_vars() {
 	d_hid_err_gradients = NULL;
 	d_out_err_gradients = NULL;
 
+	CUDA_CHECK_RETURN(cudaStreamCreate(&bprop_stream));
 	CUDA_CHECK_RETURN(cudaStreamCreate(&err_calc_stream));
 	CUDA_CHECK_RETURN(cudaStreamCreate(&weight_update_stream1));
 	CUDA_CHECK_RETURN(cudaStreamCreate(&weight_update_stream2));
@@ -660,6 +662,12 @@ void GPUNet::init_vars() {
 	CUDA_CHECK_RETURN(cudaStreamCreate(&train_stream2));
 	CUDA_CHECK_RETURN(cudaEventCreate(&event1));
 	CUDA_CHECK_RETURN(cudaEventCreate(&event2));
+
+//	int i = 0;
+//	CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_mse, &trainingSetMSE, sizeof(float), 0, cudaMemcpyHostToDevice));
+//	CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_acc, &trainingSetAccuracy, sizeof(float), 0, cudaMemcpyHostToDevice));
+//	CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_mse_sum, &trainingSetMSE, sizeof(float), 0, cudaMemcpyHostToDevice));
+//	CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_num_correct, &i, sizeof(int), 0, cudaMemcpyHostToDevice));
 
 	/*
 	 * host validation
@@ -1053,14 +1061,19 @@ void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_featu
 	for (size_t i = 0; i < n_features; ++i) {
 		feed_forward_v1_2(feature_vecs[i]->input);
 		backprop_v2(feature_vecs[i]->input, feature_vecs[i]->target);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+		if (!batching) //need to wait for wait update, otherwise no sync because gradients and deltas in same stream
+			CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	}
 	if (batching) { //update weights here and reset deltas
+		CUDA_CHECK_RETURN(cudaEventRecord(event1, bprop_stream));
+		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream1, event1, 0));
+		CUDA_CHECK_RETURN(cudaEventRecord(event2, bprop_stream));
+		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream2, event2, 0));
 		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream1>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas, true);
 		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, true);
 	}
-	calc_mse<<<1, 1>>>(n_output, n_features);
-	calc_acc<<<1, 1>>>(n_features);
+	calc_mse<<<1, 1, 0, err_calc_stream>>>(n_output, n_features);
+	calc_acc<<<1, 1, 0, err_calc_stream>>>(n_features);
 	finish = clock();
 	std::cout << "time: " << ((double)finish-start)/CLOCKS_PER_SEC << std::endl;
 }
@@ -1078,28 +1091,29 @@ void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
 	//CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse_sum, d_mse_sum, sizeof(float), 0, cudaMemcpyDeviceToHost));
 	//std::cout << "Current mse_sum = " << mse_sum << std::endl;
 
-	output_error_gradients_v2<<<(n_output+n_threads-1)/n_threads, n_threads, 0, 0>>>(d_output, d_tar, d_out_err_gradients, n_output);
+	output_error_gradients_v2<<<(n_output+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(d_output, d_tar, d_out_err_gradients, n_output);
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-	update_hidden_output_deltas_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, 0>>>(n_hidden, n_output, l_rate, momentum, d_hidden, d_out_err_gradients, d_ho_deltas);
+	update_hidden_output_deltas_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, l_rate, momentum, d_hidden, d_out_err_gradients, d_ho_deltas);
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-	hidden_error_gradients_v2<<<(n_hidden+n_threads-1)/n_threads, n_threads, 0, 0>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+	hidden_error_gradients_v2<<<(n_hidden+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
 	if (!batching) { // don't update weights here
-		CUDA_CHECK_RETURN(cudaEventRecord(event1));
+		CUDA_CHECK_RETURN(cudaEventRecord(event1, bprop_stream));
 		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream1, event1, 0));
 		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream1>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas, false);
 	}
 
-	update_input_hidden_deltas_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, 0>>>(n_input, n_hidden, l_rate, momentum,
+	update_input_hidden_deltas_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_input, n_hidden, l_rate, momentum,
 			d_inp, d_hid_err_gradients, d_ih_deltas);
 
 	if (!batching) { // don't update weights here
-		CUDA_CHECK_RETURN(cudaEventRecord(event2));
+		CUDA_CHECK_RETURN(cudaEventRecord(event2, bprop_stream));
 		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream2, event2, 0));
+		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
 
 //		int n_streams = 4;
 //		cudaStream_t *streams = (cudaStream_t*)malloc(n_streams*sizeof(cudaStream_t));
@@ -1109,7 +1123,6 @@ void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
 //			update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, streams[i]>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
 //		}
 //
-		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
 //		for (int i = 0; i < n_streams; ++i) {
 //			CUDA_CHECK_RETURN(cudaStreamDestroy(streams[i]));
 //		}
