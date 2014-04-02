@@ -56,22 +56,44 @@ void test(GPUNet &gnet, Net &net, NetData &d) {
 void process_args(int argc, char **argv) {
 	float l_rate, momentum;
 	int max_epochs, save_freq;
+	bool batch;
 	po::options_description desc("Allowed options");
 	desc.add_options()
 		("help,h", "produce help message")
 		("dataset,d", po::value<std::string>(), "data set file")
-		("loadnet,l", po::value<std::string>(), "load net file")
+		("loadnet,n", po::value<std::string>(), "load net file")
+		("profile,p", po::value<std::string>(), "profile GPU functions")
 		("l_rate,r", po::value<float>(&l_rate)->default_value(0.7), "learning rate, default = 0.7")
 		("momentum,m", po::value<float>(&momentum)->default_value(0.9), "momentum, default = 0.9")
+		("batch,b", po::value<bool>(&batch)->default_value(false), "batch update, default = 0 (false), will ignore momentum")
 		("max_epochs,e", po::value<int>(&max_epochs)->default_value(1000), "max epochs, default = 1000")
-		("save_freq,s", po::value<int>(&save_freq)->default_value(5), "save data after each <save_file> epochs, default = 5")
+		("save_freq,s", po::value<int>(&save_freq)->default_value(5), "save data every n epochs, default = 5")
 	;
 	po::positional_options_description p;
-	p.add("input-file", -1);
+	p.add("dataset", -1);
 
 	po::variables_map vm;
 	po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
 	po::notify(vm);
+
+	if (vm.count("dataset")) {
+		std::string dset = vm["dataset"].as<std::string>();
+	}
+	if (vm.count("loadnet")) {
+		std::string netf = vm["loadnet"].as<std::string>();
+	}
+	if (vm.count("l_rate")) {
+
+	}
+	if (vm.count("momentum")) {
+
+	}
+	if (vm.count("max_epochs")) {
+
+	}
+	if (vm.count("save_freq")) {
+
+	}
 
 }
 
@@ -81,8 +103,8 @@ int main(int argc, char **argv) {
 	time_t start, stop;
 
 	NetData d;
-	if (!d.load_file("datasets/and.dat"))
-	//if (!d.load_file("datasets/and.dat"))
+	if (!d.load_file("datasets/face/face.dat.norm"))
+	//if (!d.load_file("datasets/easy/breast_cancer.dat.norm"))
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
 
@@ -103,15 +125,15 @@ int main(int argc, char **argv) {
 
 //	GPUNet gnet("nets/face.net");
 
-	gnet.set_save_frequency(1000);
-	gnet.set_training_params(0.9, 0.9, false);
-	gnet.set_stopping_conds(200, 95.0);
+	gnet.set_save_frequency(10);
+	gnet.set_training_params(0.7, 0.9, false);
+	gnet.set_stopping_conds(1, 95.0);
 	start = clock();
 	gnet.train_net_sectioned(d.get_training_dataset());
 	stop = clock();
 	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 	//gnet.print_net();
-	//gnet.write_net("nets/face_final.net");
+	//gnet.write_net("nets/face2.net");
 
 
 //	NetTrainer nt(&net);

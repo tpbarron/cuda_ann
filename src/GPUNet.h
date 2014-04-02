@@ -40,6 +40,7 @@ public:
 	GPUNet(std::string net_file);
 	~GPUNet();
 
+	void init_nio();
 	void init_structure(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type);
 	void init_vars();
 	void alloc_dev_mem();

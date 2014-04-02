@@ -4,6 +4,7 @@ datasets/*_10000_5.dat*
 datasets/face*
 datasets/*
 nets/*
+*.*~
 
 ### Eclipse ###
 *.pydevproject

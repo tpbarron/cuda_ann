@@ -20,16 +20,14 @@ bool NetIO::read_net(std::string fname) {
 	std::ifstream in(fname.c_str());
 	if (in.is_open()) {
 		// num epochs
-		gnet->epoch = get_next_long(in);
+		int epoch = get_next_long(in);
 		get_next_long(in);
 		//gnet->max_epochs = get_next_long(in);
 
 		if (get_next_string(in) == "STANDARD") {
 			gnet->net_type = GPUNetSettings::STANDARD;
-			std::cout << "Loading standard type" << std::endl;
 		} else {
 			gnet->net_type = GPUNetSettings::GPU_ARCH_OPT;
-			std::cout << "Loading optimized type" << std::endl;
 		}
 		//skip n_layers
 		get_next_int(in);
@@ -37,8 +35,11 @@ bool NetIO::read_net(std::string fname) {
 		gnet->n_hidden = get_next_int(in);
 		gnet->n_output = get_next_int(in);
 
+		//both needed number of nodes per layer
+		gnet->init_vars();
 		gnet->alloc_dev_mem();
 
+		gnet->epoch = epoch;
 		gnet->l_rate = get_next_float(in);
 		gnet->momentum = get_next_float(in);
 		gnet->desired_acc = get_next_float(in);
@@ -49,9 +50,11 @@ bool NetIO::read_net(std::string fname) {
 		gnet->generalizationSetMSE = get_next_float(in);
 		gnet->validationSetMSE = get_next_float(in);
 
+		gnet->h_ih_weights = get_next_list(in);
+		gnet->h_ho_weights = get_next_list(in);
 		// get weights
-		CUDA_CHECK_RETURN(cudaMemcpy(gnet->d_ih_weights, get_next_list(in), (gnet->n_input+1)*gnet->n_hidden*sizeof(float), cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpy(gnet->d_ho_weights, get_next_list(in), (gnet->n_hidden+1)*gnet->n_output*sizeof(float), cudaMemcpyHostToDevice));
+		CUDA_CHECK_RETURN(cudaMemcpy(gnet->d_ih_weights, gnet->h_ih_weights, (gnet->n_input+1)*gnet->n_hidden*sizeof(float), cudaMemcpyHostToDevice));
+		CUDA_CHECK_RETURN(cudaMemcpy(gnet->d_ho_weights, gnet->h_ho_weights, (gnet->n_hidden+1)*gnet->n_output*sizeof(float), cudaMemcpyHostToDevice));
 
 		in.close();
 	} else {
@@ -70,11 +73,9 @@ bool NetIO::write_net(std::string fname) {
 	std::ofstream of(fname.c_str());
 
 	if (of.is_open()) {
-		std::cout << "file is open" <<std::endl;
 		CUDA_CHECK_RETURN(cudaMemcpy(gnet->h_ih_weights, gnet->d_ih_weights, (gnet->n_input+1)*(gnet->n_hidden)*sizeof(float), cudaMemcpyDeviceToHost));
 		CUDA_CHECK_RETURN(cudaMemcpy(gnet->h_ho_weights, gnet->d_ho_weights, (gnet->n_hidden+1)*(gnet->n_output)*sizeof(float), cudaMemcpyDeviceToHost));
 
-		std::cout << "weights copied"<<std::endl;
 		of << "num_epochs=" << gnet->epoch << std::endl;
 		of << "max_epochs=" << gnet->max_epochs << std::endl;
 
@@ -105,8 +106,6 @@ bool NetIO::write_net(std::string fname) {
 		of << "gset_mse=" << gnet->generalizationSetMSE << std::endl;
 		of << "vset_mse=" << gnet->validationSetMSE << std::endl;
 
-		std::cout << "starting to write weights"<<std::endl;
-
 		of << "weights_ih=";
 		for (int i = 0, l = (gnet->n_input+1)*gnet->n_hidden; i < l; ++i) {
 			of << gnet->h_ih_weights[i];
@@ -120,8 +119,6 @@ bool NetIO::write_net(std::string fname) {
 			if (i != l-1)
 				of << ",";
 		}
-
-		std::cout << "finished writing weights"<<std::endl;
 
 		of.flush();
 		of.close();

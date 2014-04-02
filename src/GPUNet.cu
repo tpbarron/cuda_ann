@@ -38,12 +38,12 @@ __device__ float get_random_range(float min, float max, int i, curandState *glob
 	return min + r * (max - min);
 }
 
-__device__ float get_ih_weight(float* ih_weights, int n_hidden, int i, int h) {
-	return ih_weights[n_hidden*i + h];
+__device__ float get_ih_weight(float* ih_weights, int n_input, int i, int h) {
+	return ih_weights[n_input*h + i];
 }
 
-__device__ float get_ho_weight(float* ho_weights, int n_output, int h, int o) {
-	return ho_weights[n_output*h + o];
+__device__ float get_ho_weight(float* ho_weights, int n_hidden, int h, int o) {
+	return ho_weights[n_hidden*o + h];
 }
 
 /**
@@ -122,20 +122,17 @@ __global__ void init_nodes_output_v2(int n, float *output) {
 
 
 __global__ void init_weights_v2(int n1, int n2, float *weights, curandState *state) {
-	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
+	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
 	// r is the range for random values
 	if (i < (n1+1)*n2) {
 		float r = 1.0 / sqrt((float)blockDim.x-1);
-		int node_l1 = i % (n1+1);
-		int node_l2 = i % n2;
-		weights[n2*node_l1 + node_l2] = get_random_range(-r, r, threadIdx.x, state);
+		weights[i] = get_random_range(-r, r, threadIdx.x, state);
 	}
 }
 
 
 __global__ void init_deltas_v2(unsigned int n1, unsigned int n2, float *deltas) {
 	unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
-
 	if (i < (n1+1)*n2) {
 		deltas[i] = 0;
 	}
@@ -229,7 +226,7 @@ __global__ void feed_forward_layer_v1(int n_layer1, int n_layer2, float* layer1,
 
 	float r = 0;
 	for (int i = 0; i <= n_layer1; ++i) { //include bias
-		r += layer1[i] * weights[n_layer2*i + n];
+		r += layer1[i] * weights[n_layer1*n + i];
 	}
 	layer2[n] = sigmoid(r);
 }
@@ -242,7 +239,7 @@ __global__ void feed_forward_layer_v1_2(int n_layer1, int n_layer2, float* layer
 	if (n < n_layer2) {
 		float r = 0;
 		for (int i = 0; i <= n_layer1; ++i) { //include bias
-			r += layer1[i] * weights[n_layer2*i + n];
+			r += layer1[i] * weights[n_layer1*n + i];
 		}
 		layer2[n] = sigmoid(r);
 	}
@@ -271,9 +268,9 @@ __global__ void feed_forward_layer_v1_3(int n_layer1, int n_layer2, float* layer
 		float r = 0;
 		for (int i = 0; i <= n_layer1; ++i) { //include bias
 			if (i < n_layer1 && i < blockDim.x)
-				r += slayer1[i] * weights[n_layer2*i + n];
+				r += slayer1[i] * weights[n_layer1*n + i];
 			else
-				r += layer1[i] * weights[n_layer2*i + n];
+				r += layer1[i] * weights[n_layer1*n + i];
 		}
 		layer2[n] = sigmoid(r);
 	}
@@ -288,7 +285,7 @@ __global__ void feed_forward_layer_v2_2(unsigned int pow2, int n_layer1, int n_l
 		int i = x % (n_layer1+1);
 		int j = i % n_layer2;
 		int p = j*pow2 + i;
-		sums[p] = layer1[i] * weights[n_layer2*i + j];
+		sums[p] = layer1[i] * weights[n_layer1*j + i];
 	}
 }
 
@@ -297,7 +294,6 @@ __global__ void feed_forward_layer_v2_2(unsigned int pow2, int n_layer1, int n_l
  */
 __global__ void compute_activation_v2(float* nodes, float *sums, int n_layer, int stride) {
 	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x; // input node
-
 	if (i < n_layer)
 		nodes[i] = sigmoid(sums[i*stride]);
 }
@@ -371,21 +367,27 @@ __global__ void update_hidden_output_deltas_v2(int nh, int no, float l_rate, flo
 
 	if (x < (nh+1)*no) { // if in range
 		//NOTE: this was my bug, had (x % nh) not (x % (nh+1))
-		int j = x % (nh+1); //input node
-		int k = x % no; //hidden node
+		int j = x % (nh+1); //hidden node
+		int k = x % no; //output node
+		//delta_ho[nh*k + j] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[nh*k + j];
 
-		delta_ho[no*j + k] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[no*j + k];
+		//NOTE: likely to be more hidden nodes than output nodes so more advantageous to keep j coalesced
+		delta_ho[x] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[x];
+
 		//printf("delta_ho(%d, %d) = %f, l_rate = %f, hidden[%d] = %f, out_err_gradients[%d] = %f, momentum = %f\n",
 		//			j, k, delta_ho[no*j+k], l_rate, j, hidden[j], k, output_err_gradients[k], momentum);
 	}
 }
 
 
-__device__ float calc_hidden_gradient(int j, int no, float* hidden, float* d_ho_weights, float* output_err_gradients) {
+/*
+ * TODO: I am using n_layer1*j+i to address weights. But this is less efficient here since need to access all outputs
+ */
+__device__ float calc_hidden_gradient(int j, int nh, int no, float* hidden, float* d_ho_weights, float* output_err_gradients) {
 	//get sum of hidden->output weights * output error gradients
 	float s = 0;
 	for (int k = 0; k < no; ++k)
-		s += d_ho_weights[j*no + k] * output_err_gradients[k];
+		s += d_ho_weights[nh*k + j] * output_err_gradients[k];
 
 	//return error gradient
 	return hidden[j] * (1 - hidden[j]) * s;
@@ -398,7 +400,7 @@ __global__ void hidden_error_gradients_v2(int nh, int no, float* hidden, float* 
 	unsigned int j = blockIdx.x * blockDim.x+threadIdx.x;
 
 	if (j < nh) { //NOTE: another bug, had (j < (nh+1)*no), only nh nodes need calculated
-		hidden_err_gradients[j] = calc_hidden_gradient(j, no, hidden, d_ho_weights, output_err_gradients);
+		hidden_err_gradients[j] = calc_hidden_gradient(j, nh, no, hidden, d_ho_weights, output_err_gradients);
 		//printf("hidden_err_grad[%d] = %f\n", j, hidden_err_gradients[j]);
 	}
 }
@@ -416,7 +418,10 @@ __global__ void update_input_hidden_deltas_v2(int ni, int nh, float l_rate, floa
 		int i = x % (ni+1); //input node, NOTE: same bug as before
 		int j = x % nh; //hidden node
 
-		delta_ih[nh*i + j] = l_rate * input[i] * hidden_err_gradients[j] + momentum * delta_ih[nh*i + j];
+		//delta_ih[ni*j + i] = l_rate * input[i] * hidden_err_gradients[j] + momentum * delta_ih[ni*j + i];
+
+		//NOTE: usually more input nodes than hidden nodes so keep input access coalesced
+		delta_ih[x] = l_rate * input[i] * hidden_err_gradients[j] + momentum * delta_ih[x];
 
 		//printf("delta_ih(%d, %d) = %f, l_rate = %f, input[%d] = %f, hidden_err_gradients[%d] = %f, momentum = %f\n",
 		//			i, j, delta_ih[nh*i + j], l_rate, i, input[i], j, hidden_err_gradients[j], momentum);
@@ -431,14 +436,17 @@ __global__ void update_weights_v2(int n1, int n2, float *d_weights, float *delta
 	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
 
 	if (x < (n1+1)*n2) {
-		int i = x % (n1+1); //layer 1 node, NOTE: same bug
-		int j = x % n2; //layer 2 node
+		//int i = x % (n1+1); //layer 1 node, NOTE: same bug
+		//int j = x % n2; //layer 2 node
 
-		d_weights[i*n2 + j] += deltas[i*n2 + j];
+		//d_weights[n1*j + i] += deltas[n1*j + i];
+
+		//Indexing is irrelevant here
+		d_weights[x] += deltas[x];
 		//printf("d_weights(%d, %d) = %f, deltas(%d, %d) = %f\n", i, j, d_weights[n2*i+j], i, j, deltas[n2*i + j]);
 
 		if (reset)
-			deltas[i*n2 + j] = 0;
+			deltas[x] = 0;
 	}
 }
 
@@ -473,9 +481,9 @@ __global__ void update_hidden_output_deltas_rprop(int nh, int no, float step_p, 
 
 		int r = output_err_gradients[x] * output_err_gradients_tmp[x];
 		if (r > 0) {
-			delta_ho[no*j + k] = min(delta_ho[no*j + k] * step_p, d_max);
+			delta_ho[nh*k + j] = min(delta_ho[nh*k + j] * step_p, d_max);
 		} else if (r < 0) {
-			delta_ho[no*j + k] = max(delta_ho[no*j + k] * step_m, d_min);
+			delta_ho[nh*k + j] = max(delta_ho[nh*k + j] * step_m, d_min);
 		} else {
 			//TODO: need something here for start when delta = 0
 		}
@@ -490,7 +498,7 @@ __global__ void update_weights_rprop(int n1, int n2, float *d_weights, float* gr
 		int j = x % n2; //layer 2 node
 
 		int sign = (gradients[j] > 0) - (gradients[j] < 0);
-		d_weights[i*n2 + j] = d_weights[i*n2 + j] - sign*deltas[i*n2 + j];
+		d_weights[n1*j + i] = d_weights[n1*j + i] - sign*deltas[n1*j + i];
 	}
 }
 
@@ -550,14 +558,13 @@ GPUNet::GPUNet(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructur
 	n_input = 0;
 	GPUNet::init_structure(ni, no, net_type);
 	GPUNet::init_vars();
+	GPUNet::init_nio();
 }
 
 GPUNet::GPUNet(std::string net_file) {
 	std::cout << "Initializing from net file: " << net_file << "." << std::endl;
-	init_vars();
-	read_net(net_file);
-
-	std::cout << "init mse=" << trainingSetMSE << std::endl;
+	GPUNet::init_nio();
+	GPUNet::read_net(net_file);
 }
 
 GPUNet::~GPUNet() {
@@ -594,6 +601,10 @@ GPUNet::~GPUNet() {
  * -------------- public ---------------
  */
 
+void GPUNet::init_nio() {
+	nio = new NetIO();
+	nio->set_gnet(this);
+}
 
 void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type) {
 	if (n_input != 0) { // constructor initializing nodes has been called, error out
@@ -615,9 +626,6 @@ void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNetSettings::Ne
 }
 
 void GPUNet::init_vars() {
-	nio = new NetIO();
-	nio->set_gnet(this);
-
 	max_epochs = GPUNetSettings::GPU_MAX_EPOCHS;
 	l_rate = GPUNetSettings::GPU_LEARNING_RATE;
 	momentum = GPUNetSettings::GPU_MOMENTUM;
@@ -653,21 +661,6 @@ void GPUNet::init_vars() {
 
 	d_hid_err_gradients = NULL;
 	d_out_err_gradients = NULL;
-
-	CUDA_CHECK_RETURN(cudaStreamCreate(&bprop_stream));
-	CUDA_CHECK_RETURN(cudaStreamCreate(&err_calc_stream));
-	CUDA_CHECK_RETURN(cudaStreamCreate(&weight_update_stream1));
-	CUDA_CHECK_RETURN(cudaStreamCreate(&weight_update_stream2));
-	CUDA_CHECK_RETURN(cudaStreamCreate(&train_stream1));
-	CUDA_CHECK_RETURN(cudaStreamCreate(&train_stream2));
-	CUDA_CHECK_RETURN(cudaEventCreate(&event1));
-	CUDA_CHECK_RETURN(cudaEventCreate(&event2));
-
-//	int i = 0;
-//	CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_mse, &trainingSetMSE, sizeof(float), 0, cudaMemcpyHostToDevice));
-//	CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_acc, &trainingSetAccuracy, sizeof(float), 0, cudaMemcpyHostToDevice));
-//	CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_mse_sum, &trainingSetMSE, sizeof(float), 0, cudaMemcpyHostToDevice));
-//	CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_num_correct, &i, sizeof(int), 0, cudaMemcpyHostToDevice));
 
 	/*
 	 * host validation
@@ -713,6 +706,15 @@ void GPUNet::alloc_dev_mem() {
 	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_hid_err_gradients, (n_hidden+1)*sizeof(float)));
 	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_out_err_gradients, (n_output+1)*sizeof(float)));
 	add_gpu_mem((n_hidden + n_output + 2)*sizeof(float));
+
+	CUDA_CHECK_RETURN(cudaStreamCreate(&bprop_stream));
+	CUDA_CHECK_RETURN(cudaStreamCreate(&err_calc_stream));
+	CUDA_CHECK_RETURN(cudaStreamCreate(&weight_update_stream1));
+	CUDA_CHECK_RETURN(cudaStreamCreate(&weight_update_stream2));
+	CUDA_CHECK_RETURN(cudaStreamCreate(&train_stream1));
+	CUDA_CHECK_RETURN(cudaStreamCreate(&train_stream2));
+	CUDA_CHECK_RETURN(cudaEventCreate(&event1));
+	CUDA_CHECK_RETURN(cudaEventCreate(&event2));
 
 	std::cout << "Memory allocated on device" << std::endl;
 }
@@ -1006,11 +1008,9 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 			++epoch;
 
 			if (epoch % save_freq == 0) {
-				std::cout << "starting save" << std::endl;
 				std::string fname = "nets/face_" + boost::lexical_cast<std::string>(epoch) + ".net";
 				std::cout << "Writing intermediary net " << fname << std::endl;
 				write_net(fname);
-				std::cout << "finished save" << std::endl;
 			}
 		}
 	} else {
