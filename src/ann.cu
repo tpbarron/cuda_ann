@@ -8,6 +8,9 @@
 #include "NetTrainer.h"
 #include "Profiler.h"
 #include <boost/lexical_cast.hpp>
+#include <boost/program_options.hpp>
+
+namespace po = boost::program_options;
 
 /**
  * This macro checks return value of the CUDA runtime call and exits
@@ -50,13 +53,35 @@ void test(GPUNet &gnet, Net &net, NetData &d) {
 }
 
 
-int main(void) {
+void process_args(int argc, char **argv) {
+	float l_rate, momentum;
+	int max_epochs, save_freq;
+	po::options_description desc("Allowed options");
+	desc.add_options()
+		("help,h", "produce help message")
+		("dataset,d", po::value<std::string>(), "data set file")
+		("loadnet,l", po::value<std::string>(), "load net file")
+		("l_rate,r", po::value<float>(&l_rate)->default_value(0.7), "learning rate, default = 0.7")
+		("momentum,m", po::value<float>(&momentum)->default_value(0.9), "momentum, default = 0.9")
+		("max_epochs,e", po::value<int>(&max_epochs)->default_value(1000), "max epochs, default = 1000")
+		("save_freq,s", po::value<int>(&save_freq)->default_value(5), "save data after each <save_file> epochs, default = 5")
+	;
+	po::positional_options_description p;
+	p.add("input-file", -1);
+
+	po::variables_map vm;
+	po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
+	po::notify(vm);
+
+}
+
+int main(int argc, char **argv) {
 	srand(time(NULL));
 
 	time_t start, stop;
 
 	NetData d;
-	if (!d.load_file("datasets/breast_cancer.dat.norm"))
+	if (!d.load_file("datasets/and.dat"))
 	//if (!d.load_file("datasets/and.dat"))
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
