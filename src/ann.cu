@@ -34,12 +34,12 @@ void profile(GPUNet &gnet, Net &net, NetData &d) {
 	Profiler p(&gnet, &net, &nt);
 	p.set_iterations(100);
 	p.profile_feed_forward_v1_2(d);
-	p.profile_feed_forward_v1_3(d);
+	//p.profile_feed_forward_v1_3(d);
 	//p.profile_feed_forward_v2_2(d);
-	//p.profile_cpu_feedforward(d.get_training_dataset()->training_set[0]->input);
+	p.profile_cpu_feedforward(d.get_training_dataset()->training_set[0]->input);
 
-	//p.profile_backprop_v2(d);
-	//p.profile_cpu_backprop(d.get_training_dataset()->training_set[0]->target);
+	p.profile_backprop_v2(d);
+	p.profile_cpu_backprop(d.get_training_dataset()->training_set[0]->target);
 }
 
 /**
@@ -126,8 +126,8 @@ int main(int argc, char **argv) {
 //	GPUNet gnet("nets/face.net");
 
 	gnet.set_save_frequency(10);
-	gnet.set_training_params(0.7, 0.9, false);
-	gnet.set_stopping_conds(1, 95.0);
+	gnet.set_training_params(0.25, 0.9, false);
+	gnet.set_stopping_conds(1000, 95.0);
 	start = clock();
 	gnet.train_net_sectioned(d.get_training_dataset());
 	stop = clock();
