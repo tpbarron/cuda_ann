@@ -130,19 +130,19 @@ void Net::print_network() {
  * 1D arrays.
  */
 float Net::get_ih_weight(int i, int h) {
-	return Net::wInputHidden[Net::n_hidden*i + h];
+	return Net::wInputHidden[(Net::n_input+1)*h + i];
 }
 
 float Net::get_ho_weight(int h, int o) {
-	return Net::wHiddenOutput[Net::n_output*h + o];
+	return Net::wHiddenOutput[(Net::n_hidden+1)*o + h];
 }
 
 void Net::set_ih_weight(int i, int h, float w) {
-	Net::wInputHidden[Net::n_hidden*i + h] = w;
+	Net::wInputHidden[(Net::n_input+1)*h + i] = w;
 }
 
 void Net::set_ho_weight(int h, int o, float w) {
-	Net::wHiddenOutput[Net::n_output*h + o] = w;
+	Net::wHiddenOutput[(Net::n_hidden+1)*o + h] = w;
 }
 
 
@@ -176,31 +176,38 @@ void Net::init_weights() {
 }
 
 
-float Net::get_set_mse(thrust::host_vector<FeatureVector*> set) {
+float Net::get_set_mse(float* set, int size, int fpp) {
 	float mse = 0;
 	//for every training input array
-	for ( int tp = 0; tp < (int) set.size(); tp++) {
+	for (int tp = 0; tp < size; ++tp) {
+
+		float* input = &(set[tp*fpp]);
+		float* target = &(set[tp*fpp+n_input+1]);
+
 		//feed inputs through network and backpropagate errors
-		feed_forward(set[tp]->input);
+		feed_forward(input);
 
 		//check all outputs against desired output values
-		for ( int k = 0; k < n_output; k++ ) {
+		for (int k = 0; k < n_output; ++k) {
 			//sum all the MSEs together
-			mse += pow((outputNeurons[k] - set[tp]->target[k]), 2);
+			mse += pow((outputNeurons[k] - target[k]), 2);
 		}
 	}
 
-	return mse / (n_output * set.size());
+	return mse / (n_output * size);
 }
 
 
-float Net::get_set_accuracy(thrust::host_vector<FeatureVector*> set) {
+float Net::get_set_accuracy(float* set, int size, int fpp) {
 	float incorrectResults = 0;
 
 	//for every training input array
-	for (int tp = 0; tp < (int) set.size(); tp++) {
+	for (int tp = 0; tp < size; ++tp) {
 		//feed inputs through network and backpropagate errors
-		feed_forward(set[tp]->input);
+		float* input = &(set[tp*fpp]);
+		float* target = &(set[tp*fpp+n_input+1]);
+
+		feed_forward(input);
 
 		//correct pattern flag
 		bool correctResult = true;
@@ -208,7 +215,7 @@ float Net::get_set_accuracy(thrust::host_vector<FeatureVector*> set) {
 		//check all outputs against desired output values
 		for (int k = 0; k < n_output; ++k) {
 			//set flag to false if desired and output differ
-			if (clamp_output(outputNeurons[k]) != set[tp]->target[k])
+			if (clamp_output(outputNeurons[k]) != clamp_output(target[k]))
 				correctResult = false;
 		}
 
@@ -219,7 +226,7 @@ float Net::get_set_accuracy(thrust::host_vector<FeatureVector*> set) {
 	}
 
 	//calculate error and return as percentage
-	return 100 - (incorrectResults/set.size() * 100);
+	return 100 - (incorrectResults/size * 100);
 }
 
 

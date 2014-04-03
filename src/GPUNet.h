@@ -67,11 +67,11 @@ public:
 
 	void copy_error_to_host();
 
-	void feed_forward_v1_2(float *d_inp);
+	void feed_forward_v1_2(float *d_set, int inp);
 	void feed_forward_v1_3(float *d_inp);
 	void feed_forward_v2_2(unsigned int n, float *d_inp, float *d_sums); //inputs already copied
 
-	void backprop_v2(float *d_inp, float *d_tar);
+	void backprop_v2(float *d_set, int inp, int tar);
 	void rprop(float *d_inp, float *d_tar);
 
 	float* evaluate(float* input);
@@ -86,6 +86,8 @@ public:
 
 	size_t current_mem_usage(int dev);
 
+	void copy_to_device(float* set, int n_patterns, int fpp, float **d_set);
+	void copy_to_device_section(float* set, int n_patterns, int fpp, float **d_set, bool alloc);
 	void copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv);
 	void copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv,
 			int p_start, int p_end, bool allocate);
@@ -110,7 +112,7 @@ public:
 	/*
 	 * GPU state
 	 */
-	cudaStream_t bprop_stream, err_calc_stream, weight_update_stream1, weight_update_stream2, train_stream1, train_stream2;
+	cudaStream_t bprop_stream, err_calc_stream, weight_update_stream1, weight_update_stream2, copy_stream;
 	cudaEvent_t event1, event2;
 
 	/*
@@ -144,7 +146,7 @@ public:
 	float validationSetMSE;
 	float generalizationSetMSE;
 
-	void run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features);
+	void run_training_epoch_dev(float *set, int n_features, int fpp);
 
 	void add_gpu_mem(int bytes);
 	int get_current_device();

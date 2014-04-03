@@ -38,12 +38,16 @@ __device__ float get_random_range(float min, float max, int i, curandState *glob
 	return min + r * (max - min);
 }
 
-__device__ float get_ih_weight(float* ih_weights, int n_input, int i, int h) {
-	return ih_weights[n_input*h + i];
+/*
+ * Get the weight from i in layer1 to j layer2 given the array of weights between them.
+ * n_layer is the number of nodes in the layer containing i.
+ */
+__device__ float get_weight(float* weights, int n_layer, int i, int j) {
+	return weights[(n_layer+1)*j + i];
 }
 
-__device__ float get_ho_weight(float* ho_weights, int n_hidden, int h, int o) {
-	return ho_weights[n_hidden*o + h];
+__device__ void set_weight(float* weights, int n_layer, int i, int j, float v) {
+	weights[(n_layer+1)*j + i] = v;
 }
 
 /**
@@ -54,15 +58,6 @@ __device__ inline float sigmoid(float x) {
 	return 1.0 / (1.0 + exp(-x));
 }
 
-
-/**
- * Compute the output gradient given specific output and target values
- * \param output float
- * \param target float
- */
-__device__ float calc_output_gradient(float output, float target) {
-	return output * (1 - output) * (target - output);
-}
 
 
 /**
@@ -163,7 +158,8 @@ __device__ float d_acc = 0;
 __device__ float d_mse_sum = 0;
 __device__ float d_mse = 0; //current mse
 
-__global__ void output_correct_v2(float *output, float *target, int n_output) {
+__global__ void output_correct_v2(float *output, float *d_set, int t, int n_output) {
+	float *target = &(d_set[t]);
 	for (int i = 0; i < n_output; ++i) {
 		if (clamp(output[i]) != clamp(target[i])) {
 			return;
@@ -177,11 +173,12 @@ __global__ void calc_acc(int n_patterns) {
 	d_num_correct = 0;
 }
 
-/**
+/** int fpp
  * single threaded
  */
-__global__ void mse_sum_v2(float *output, float *target, int n_output) {
+__global__ void mse_sum_v2(float *output, float *d_set, int t, int n_output) {
 	float sum = 0;
+	float *target = &(d_set[t]);
 	for (int i = 0; i < n_output; ++i) {
 		sum += pow(output[i] - target[i], 2);
 	}
@@ -226,7 +223,7 @@ __global__ void feed_forward_layer_v1(int n_layer1, int n_layer2, float* layer1,
 
 	float r = 0;
 	for (int i = 0; i <= n_layer1; ++i) { //include bias
-		r += layer1[i] * weights[n_layer1*n + i];
+		r += layer1[i] * get_weight(weights, n_layer1, i, n);
 	}
 	layer2[n] = sigmoid(r);
 }
@@ -239,8 +236,23 @@ __global__ void feed_forward_layer_v1_2(int n_layer1, int n_layer2, float* layer
 	if (n < n_layer2) {
 		float r = 0;
 		for (int i = 0; i <= n_layer1; ++i) { //include bias
-			r += layer1[i] * weights[n_layer1*n + i];
+			r += layer1[i] * weights[(n_layer1+1)*n + i]; //get_weight(weights, n_layer1, i, n);
 		}
+		layer2[n] = sigmoid(r);
+	}
+}
+
+__global__ void feed_forward_layer_v1_2_flat(int n_layer1, int n_layer2, float* d_set, int ind, float* layer2, float* weights) {
+	unsigned int n = blockIdx.x * blockDim.x+threadIdx.x; // node to compute;
+	if (n < n_layer2) {
+		//printf("n=%d, n_layer2=%d\n",n, n_layer2);
+		float *layer1 = &(d_set[ind]);
+		float r = 0;
+		for (int i = 0; i <= n_layer1; ++i) { //include bias
+			r += layer1[i] * weights[(n_layer1+1)*n + i]; //get_weight(weights, n_layer1, i, n);
+			//printf("n=%d, r=%f, input[%d]=%f, weight[%d,%d]=%f\n", n, r, i, layer1[i],i,n,weights[(n_layer1+1)*n+i]);
+		}
+		//printf("n = %d, sigmoid(%f)=%f\n",n, r,sigmoid(r));
 		layer2[n] = sigmoid(r);
 	}
 }
@@ -343,14 +355,23 @@ __global__ void reduce_kernel(float *g_idata, float *g_odata, unsigned int n, in
  *
  */
 
+/**
+ * Compute the output gradient given specific output and target values
+ * \param output float
+ * \param target float
+ */
+__device__ float calc_output_gradient(float output, float target) {
+	return output * (1 - output) * (target - output);
+}
 
 /*
  * called generically, pow of 2 threads
  */
-__global__ void output_error_gradients_v2(float* output, float* target, float* output_err_gradients, int no) {
+__global__ void output_error_gradients_v2(float* output, float* d_set, int t, float* output_err_gradients, int no) {
 	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
 
 	if (i < no) {
+		float *target = &(d_set[t]);
 		output_err_gradients[i] = calc_output_gradient(output[i], target[i]);
 		//printf("out_err_grad[%d] = %f, output = %f, target = %f\n", i, output_err_gradients[i], output[i], target[i]);
 	}
@@ -368,14 +389,15 @@ __global__ void update_hidden_output_deltas_v2(int nh, int no, float l_rate, flo
 	if (x < (nh+1)*no) { // if in range
 		//NOTE: this was my bug, had (x % nh) not (x % (nh+1))
 		int j = x % (nh+1); //hidden node
-		int k = x % no; //output node
+		//int k = x % no; //output node
+		int k = x / (nh+1);
 		//delta_ho[nh*k + j] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[nh*k + j];
 
 		//NOTE: likely to be more hidden nodes than output nodes so more advantageous to keep j coalesced
 		delta_ho[x] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[x];
 
-		//printf("delta_ho(%d, %d) = %f, l_rate = %f, hidden[%d] = %f, out_err_gradients[%d] = %f, momentum = %f\n",
-		//			j, k, delta_ho[no*j+k], l_rate, j, hidden[j], k, output_err_gradients[k], momentum);
+		//printf("x=%d, delta_ho(%d, %d) = %f, l_rate = %f, hidden[%d] = %f, out_err_gradients[%d] = %f, momentum = %f\n",
+		//			x, j, k, delta_ho[x], l_rate, j, hidden[j], k, output_err_gradients[k], momentum);
 	}
 }
 
@@ -387,7 +409,7 @@ __device__ float calc_hidden_gradient(int j, int nh, int no, float* hidden, floa
 	//get sum of hidden->output weights * output error gradients
 	float s = 0;
 	for (int k = 0; k < no; ++k)
-		s += d_ho_weights[nh*k + j] * output_err_gradients[k];
+		s += d_ho_weights[(nh+1)*k + j]; //get_weight(d_ho_weights, nh, j, k) * output_err_gradients[k];
 
 	//return error gradient
 	return hidden[j] * (1 - hidden[j]) * s;
@@ -411,20 +433,22 @@ __global__ void hidden_error_gradients_v2(int nh, int no, float* hidden, float* 
  */
 //TODO: perhaps there is a way to store the hidden_err_gradient[j] in shared memory
 __global__ void update_input_hidden_deltas_v2(int ni, int nh, float l_rate, float momentum,
-		float* input, float* hidden_err_gradients, float* delta_ih) {
+		float* d_set, int i, float* hidden_err_gradients, float* delta_ih) {
 	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
 
 	if (x < (ni+1)*nh) {
+		float *input = &(d_set[i]);
 		int i = x % (ni+1); //input node, NOTE: same bug as before
-		int j = x % nh; //hidden node
+		//int j = x % nh; //hidden node
+		int j = x / (ni+1);
 
 		//delta_ih[ni*j + i] = l_rate * input[i] * hidden_err_gradients[j] + momentum * delta_ih[ni*j + i];
 
 		//NOTE: usually more input nodes than hidden nodes so keep input access coalesced
 		delta_ih[x] = l_rate * input[i] * hidden_err_gradients[j] + momentum * delta_ih[x];
 
-		//printf("delta_ih(%d, %d) = %f, l_rate = %f, input[%d] = %f, hidden_err_gradients[%d] = %f, momentum = %f\n",
-		//			i, j, delta_ih[nh*i + j], l_rate, i, input[i], j, hidden_err_gradients[j], momentum);
+		//printf("x=%d, delta_ih(%d, %d) = %f, l_rate = %f, input[%d] = %f, hidden_err_gradients[%d] = %f, momentum = %f\n",
+		//			x, i, j, delta_ih[x], l_rate, i, input[i], j, hidden_err_gradients[j], momentum);
 	}
 }
 
@@ -441,9 +465,9 @@ __global__ void update_weights_v2(int n1, int n2, float *d_weights, float *delta
 
 		//d_weights[n1*j + i] += deltas[n1*j + i];
 
+		//printf("d_weights(%d) = %f, deltas(%d) = %f\n", x, d_weights[x], x, deltas[x]);
 		//Indexing is irrelevant here
 		d_weights[x] += deltas[x];
-		//printf("d_weights(%d, %d) = %f, deltas(%d, %d) = %f\n", i, j, d_weights[n2*i+j], i, j, deltas[n2*i + j]);
 
 		if (reset)
 			deltas[x] = 0;
@@ -517,7 +541,7 @@ __global__ void print_gpu_net(int n_input, int n_hidden, int n_output,
 	printf("\n");
 	for (int i = 0; i <= n_input; ++i) {
 		for (int j = 0; j < n_hidden; ++j) {
-			printf("ih weight (%d, %d): %f, ", i, j, ih_weights[n_hidden*i + j]);
+			printf("ih weight (%d,%d,%d): %f, ", i, j, (n_input+1)*j + i, get_weight(ih_weights, n_input, i, j));
 		}
 	}
 	printf("\n");
@@ -527,7 +551,7 @@ __global__ void print_gpu_net(int n_input, int n_hidden, int n_output,
 	printf("\n");
 	for (int i = 0; i <= n_hidden; ++i) {
 		for (int j = 0; j < n_output; ++j) {
-			printf("ho weight (%d, %d): %f, ", i, j, ho_weights[n_output*i + j]);
+			printf("ho weight (%d,%d,%d): %f, ", i, j, (n_hidden+1)*j + i, get_weight(ho_weights, n_hidden, i, j));
 		}
 	}
 	printf("\n");
@@ -587,6 +611,7 @@ GPUNet::~GPUNet() {
 	CUDA_CHECK_RETURN(cudaStreamDestroy(weight_update_stream2));
 	CUDA_CHECK_RETURN(cudaStreamDestroy(train_stream1));
 	CUDA_CHECK_RETURN(cudaStreamDestroy(train_stream2));
+	CUDA_CHECK_RETURN(cudaStreamDestroy(copy_stream));
 	CUDA_CHECK_RETURN(cudaEventDestroy(event1));
 	CUDA_CHECK_RETURN(cudaEventDestroy(event2));*/
 
@@ -711,8 +736,7 @@ void GPUNet::alloc_dev_mem() {
 	CUDA_CHECK_RETURN(cudaStreamCreate(&err_calc_stream));
 	CUDA_CHECK_RETURN(cudaStreamCreate(&weight_update_stream1));
 	CUDA_CHECK_RETURN(cudaStreamCreate(&weight_update_stream2));
-	CUDA_CHECK_RETURN(cudaStreamCreate(&train_stream1));
-	CUDA_CHECK_RETURN(cudaStreamCreate(&train_stream2));
+	CUDA_CHECK_RETURN(cudaStreamCreate(&copy_stream));
 	CUDA_CHECK_RETURN(cudaEventCreate(&event1));
 	CUDA_CHECK_RETURN(cudaEventCreate(&event2));
 
@@ -729,7 +753,7 @@ void GPUNet::init_from_net(Net &net, NetData &d) {
 
 	//copy first pattern to input neurons so it is copied to device, instead of zeros
 	for (int i = 0; i < net.n_input; ++i) {
-		net.inputNeurons[i] = d.get_training_dataset()->training_set[0]->input[i];
+		//net.inputNeurons[i] = d.get_training_dataset()->training_set[0]->input[i];
 	}
 
 	// so hidden and output initialized to 0
@@ -862,8 +886,8 @@ float* GPUNet::evaluate(float* input) {
 	//copy back output
 	int threads = 128;
 	float *h_out = new float[n_output];
-	CUDA_CHECK_RETURN(cudaMemcpy((void*)d_input, (void*)input, n_input*sizeof(float), cudaMemcpyHostToDevice));
-	feed_forward_v1_2(d_input);
+	CUDA_CHECK_RETURN(cudaMemcpy((void*)d_input, (void*)input, (n_input+1)*sizeof(float), cudaMemcpyHostToDevice));
+	feed_forward_v1_2(d_input, 0);
 	clamp_outputs<<<(n_output+threads-1)/threads, threads>>>(d_output, n_output);
 	CUDA_CHECK_RETURN(cudaMemcpy(h_out, d_output, n_output*sizeof(float), cudaMemcpyDeviceToHost));
 	return h_out;
@@ -876,7 +900,7 @@ float* GPUNet::batch_evaluate(float** inputs) {
 	int threads = 128;
 	float *h_out = new float[n_output];
 	CUDA_CHECK_RETURN(cudaMemcpy((void*)d_input, (void*)inputs, n_input*sizeof(float), cudaMemcpyHostToDevice));
-	feed_forward_v1_2(d_input);
+	feed_forward_v1_2(d_input, 0);
 	clamp_outputs<<<(n_output+threads-1)/threads, threads>>>(d_output, n_output);
 	CUDA_CHECK_RETURN(cudaMemcpy(h_out, d_output, n_output*sizeof(float), cudaMemcpyDeviceToHost));
 	return h_out;
@@ -906,7 +930,7 @@ void GPUNet::calc_dataset_parameters(TrainingDataSet *tset) {
 	std::cout << " current mem usage = "<< current_mem_usage(cur_dev)<<std::endl;
 	int available_mem = total_dev_mem(cur_dev) - current_mem_usage(cur_dev);
 	std::cout << " available mem = "<<available_mem<<std::endl;
-	std::cout << " tset.size = "<<tset->size()<<std::endl;
+	std::cout << " tset.size = "<<tset->n_patterns<<std::endl;
 	n_copyable_patterns = available_mem / bytes_per_pattern;
 
 	//ensure n_copyable_patterns is even and can be split into 2 buffers
@@ -914,12 +938,12 @@ void GPUNet::calc_dataset_parameters(TrainingDataSet *tset) {
 		--n_copyable_patterns;
 	}
 
-	if (n_copyable_patterns > tset->size()) {
-		n_copyable_patterns = tset->size();
+	if (n_copyable_patterns > tset->n_patterns) {
+		n_copyable_patterns = tset->n_patterns;
 	}
 	// calc num sections
 	// num_sections = ceil ( n_patterns / n_copyable_patterns)
-	n_sections = (tset->size() + n_copyable_patterns - 1) / n_copyable_patterns;
+	n_sections = (tset->n_patterns + n_copyable_patterns - 1) / n_copyable_patterns;
 	std::cout << " n_copyable_patterns = "<<n_copyable_patterns<<", n_sections = "<<n_sections<<std::endl<<std::endl;
 }
 
@@ -933,38 +957,40 @@ void GPUNet::train_net_sectioned_overlap(TrainingDataSet *tset) {
 			<< "----------------------------------------------------" << std::endl << std::endl;
 
 	int buffer_size = n_copyable_patterns / 2;
-	FeatureVector** d_training_set1;
-	FeatureVector** d_training_set2;
+	float* d_training_buffer1;
+	float* d_training_buffer2;
+	//by default allocate array as large as possible
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_training_buffer1, buffer_size*tset->fpp*sizeof(float)));
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_training_buffer2, buffer_size*tset->fpp*sizeof(float)));
 
-	copy_to_device_host_array_ptrs_biased_section_stream(tset->training_set, &d_training_set1, 0, buffer_size, true, train_stream1);
-	CUDA_CHECK_RETURN(cudaEventRecord(event1, train_stream1));
-	CUDA_CHECK_RETURN(cudaStreamWaitEvent(train_stream2, event1, 0));
+	CUDA_CHECK_RETURN(cudaMemcpyAsync(d_training_buffer1, tset->training_set, buffer_size*tset->fpp*sizeof(float), cudaMemcpyHostToDevice, copy_stream));
 
+	int p_start = buffer_size;
 	while (epoch < max_epochs) {
-		std::cout << "Epoch: " << epoch << std::endl;
-		//copy a section and run partial epoch
-		for (int i = 0; i < n_sections*2; ++i) {
-			//copy patterns from [n_sections*n_patterns_copyable, (n_sections+1)*n_patterns_copyable)
-			int p_start = (i+1) * buffer_size;
-			int p_end = p_start + buffer_size;
-			if (p_end > tset->training_set.size()) p_end = tset->training_set.size();
+		std::cout << "Epoch: " << epoch << ", ";
+		//on even epochs, process data in buffer1
+		//copy data to buffer 2
+		if (p_start > tset->n_training) p_start = 0;
+		int p_end = p_start+buffer_size;
+		if (p_end > tset->n_training) p_end = tset->n_training;
 
-			std::cout << "copying section="<<i<<", pstart="<< p_start << ", pend="<<p_end << std::endl;
-			if (i % 2 == 0) {
-				// use buffer 1
-				// copy to buffer 2
-				copy_to_device_host_array_ptrs_biased_section_stream(tset->training_set, &d_training_set2, p_start, p_end, false, train_stream1);
-				run_training_epoch_dev(d_training_set1, p_end-p_start);
-			} else { // i % 2 == 1
-				// use buffer 2
-				// copy to buffer 1
-				copy_to_device_host_array_ptrs_biased_section_stream(tset->training_set, &d_training_set1, p_start, p_end, false, train_stream1);
-				run_training_epoch_dev(d_training_set2, p_end-p_start);
-			}
+		//ensure finished copying before processing that buffer
+		CUDA_CHECK_RETURN(cudaStreamSynchronize(copy_stream));
+		if (epoch % 2 == 0) {
+			CUDA_CHECK_RETURN(cudaMemcpyAsync(d_training_buffer2, &(tset->training_set[p_start]), p_end-p_start, cudaMemcpyHostToDevice, copy_stream));
+			run_training_epoch_dev(d_training_buffer1, buffer_size, tset->fpp);
+		} else {
+			CUDA_CHECK_RETURN(cudaMemcpyAsync(d_training_buffer1, &(tset->training_set[p_start]), p_end-p_start, cudaMemcpyHostToDevice, copy_stream));
+			run_training_epoch_dev(d_training_buffer2, buffer_size, tset->fpp);
 		}
-
-		//once training set is complete increment epoch
+		p_start += buffer_size;
 		++epoch;
+
+		if (epoch % save_freq == 0) {
+			std::string fname = "nets/face_" + boost::lexical_cast<std::string>(epoch) + ".net";
+			std::cout << "Writing intermediary net " << fname << std::endl;
+			write_net(fname);
+		}
 	}
 
 	//out validation accuracy and MSE
@@ -973,38 +999,27 @@ void GPUNet::train_net_sectioned_overlap(TrainingDataSet *tset) {
 	copy_error_to_host();
 	std::cout << "MSE = " << trainingSetMSE << std::endl;
 	std::cout << "ACC = " << trainingSetAccuracy << std::endl;
-
-	//free training set
-	for (int i = 0; i < tset->training_set.size(); ++i) {
-		CUDA_CHECK_RETURN(cudaFree(d_training_set1[i]->input));
-		CUDA_CHECK_RETURN(cudaFree(d_training_set1[i]->target));
-		free(d_training_set1[i]);
-		CUDA_CHECK_RETURN(cudaFree(d_training_set2[i]->input));
-		CUDA_CHECK_RETURN(cudaFree(d_training_set2[i]->target));
-		free(d_training_set2[i]);
-
-	}
-	free(d_training_set1);
-	free(d_training_set2);
 }
 
 
 void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 	calc_dataset_parameters(tset);
 
-	std::cout << std::endl << "Neural Network Training Starting: " << std::endl
+	std::cout << std::endl << "Neural network training starting: " << std::endl
 			<< "----------------------------------------------------" << std::endl
-			<< "LR: " << l_rate << ", Momentum: " << momentum << ", Max Epochs: " << max_epochs << std::endl
-			<< n_input << " Input Neurons, " << n_hidden << " Hidden Neurons, " << n_output << " Output Neurons" << std::endl
+			<< "LR: " << l_rate << ", momentum: " << momentum << ", max epochs: " << max_epochs << std::endl
+			<< n_input << " input, " << n_hidden << " hidden, " << n_output << " output " << std::endl
 			<< "----------------------------------------------------" << std::endl << std::endl;
 
-	FeatureVector** d_training_set;
+	float* d_training_set;
+	//by default allocate array as large as possible
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_training_set, n_copyable_patterns*tset->fpp*sizeof(float)));
 
 	if (n_sections == 1) { // no section copying necessary
-		copy_to_device_host_array_ptrs_biased(tset->training_set, &d_training_set);
+		CUDA_CHECK_RETURN(cudaMemcpy(d_training_set, tset->training_set, tset->n_training*tset->fpp*sizeof(float), cudaMemcpyHostToDevice));
 		while (epoch < max_epochs) {
 			std::cout << "Epoch: " << epoch << ", ";
-			run_training_epoch_dev(d_training_set, tset->training_set.size());
+			run_training_epoch_dev(d_training_set, tset->n_training, tset->fpp);
 			++epoch;
 
 			if (epoch % save_freq == 0) {
@@ -1021,11 +1036,11 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 				//copy patterns from [n_sections*n_patterns_copyable, (n_sections+1)*n_patterns_copyable)
 				int p_start = i * n_copyable_patterns;
 				int p_end = p_start + n_copyable_patterns;
-				if (p_end > tset->training_set.size()) p_end = tset->training_set.size();
+				if (p_end > tset->n_training) p_end = tset->n_training;
 				std::cout << "copying section="<<i<<", pstart="<< p_start << ", pend="<<p_end << std::endl;
-				copy_to_device_host_array_ptrs_biased_section(tset->training_set, &d_training_set, p_start, p_end, i == 0 && epoch == 0);
+				CUDA_CHECK_RETURN(cudaMemcpy(d_training_set, &(tset->training_set[p_start]), (p_end-p_start)*sizeof(float), cudaMemcpyHostToDevice));
 				std::cout << "data copied" << std::endl;
-				run_training_epoch_dev(d_training_set, p_end-p_start);
+				run_training_epoch_dev(d_training_set, p_end-p_start, tset->fpp);
 			}
 
 			//once training set is complete increment epoch
@@ -1041,12 +1056,7 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 	std::cout << "ACC = " << trainingSetAccuracy << std::endl;
 
 	//free training set
-	for (int i = 0; i < tset->training_set.size(); ++i) {
-		CUDA_CHECK_RETURN(cudaFree(d_training_set[i]->input));
-		CUDA_CHECK_RETURN(cudaFree(d_training_set[i]->target));
-		free(d_training_set[i]);
-	}
-	free(d_training_set);
+	CUDA_CHECK_RETURN(cudaFree(d_training_set));
 }
 
 void GPUNet::copy_error_to_host() {
@@ -1055,13 +1065,14 @@ void GPUNet::copy_error_to_host() {
 }
 
 
-void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_features) {
+void GPUNet::run_training_epoch_dev(float *set, int n_features, int fpp) {
 	int n_threads = 128;
 	start = clock();
-	for (size_t i = 0; i < n_features; ++i) {
-		feed_forward_v1_2(feature_vecs[i]->input);
-		backprop_v2(feature_vecs[i]->input, feature_vecs[i]->target);
-		if (!batching) //need to wait for wait update, otherwise no sync because gradients and deltas in same stream
+	for (int i = 0; i < n_features; ++i) {
+		//called with index of start position of target
+		feed_forward_v1_2(set, i*fpp);
+		backprop_v2(set, i*fpp, i*fpp+n_input+1);
+		if (!batching) //need to wait for weight update, otherwise no sync because gradients and deltas in same stream
 			CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	}
 	if (batching) { //update weights here and reset deltas
@@ -1080,18 +1091,18 @@ void GPUNet::run_training_epoch_dev(FeatureVector **feature_vecs, size_t n_featu
 
 
 
-void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
+void GPUNet::backprop_v2(float* d_set, int i, int t) {
 	int n_threads = 128;
 
 	//maintain mse state
-	mse_sum_v2<<<1, 1, 0, err_calc_stream>>>(d_output, d_tar, n_output);
-	output_correct_v2<<<1, 1, 0, err_calc_stream>>>(d_output, d_tar, n_output);
+	mse_sum_v2<<<1, 1, 0, err_calc_stream>>>(d_output, d_set, t, n_output);
+	output_correct_v2<<<1, 1, 0, err_calc_stream>>>(d_output, d_set, t, n_output);
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	//float mse_sum = 0;
 	//CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse_sum, d_mse_sum, sizeof(float), 0, cudaMemcpyDeviceToHost));
 	//std::cout << "Current mse_sum = " << mse_sum << std::endl;
 
-	output_error_gradients_v2<<<(n_output+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(d_output, d_tar, d_out_err_gradients, n_output);
+	output_error_gradients_v2<<<(n_output+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(d_output, d_set, t, d_out_err_gradients, n_output);
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
 	update_hidden_output_deltas_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, l_rate, momentum, d_hidden, d_out_err_gradients, d_ho_deltas);
@@ -1108,7 +1119,7 @@ void GPUNet::backprop_v2(float *d_inp, float *d_tar) {
 	}
 
 	update_input_hidden_deltas_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_input, n_hidden, l_rate, momentum,
-			d_inp, d_hid_err_gradients, d_ih_deltas);
+			d_set, i, d_hid_err_gradients, d_ih_deltas);
 
 	if (!batching) { // don't update weights here
 		CUDA_CHECK_RETURN(cudaEventRecord(event2, bprop_stream));
@@ -1138,9 +1149,9 @@ void GPUNet::rprop(float *d_inp, float *d_tar) {
 }
 
 
-void GPUNet::feed_forward_v1_2(float *d_inp) {
+void GPUNet::feed_forward_v1_2(float* d_set, int i) {
 	int threads = 128;
-	feed_forward_layer_v1_2<<<(n_hidden+threads-1)/threads, threads>>>(n_input, n_hidden, d_inp, d_hidden, d_ih_weights);
+	feed_forward_layer_v1_2_flat<<<(n_hidden+threads-1)/threads, threads>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
 	feed_forward_layer_v1_2<<<(n_output+threads-1)/threads, threads>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 }
 
@@ -1220,27 +1231,32 @@ void GPUNet::test_feed_forward(Net &net, NetData &d) {
 	clock_t start, finish;
 
 	std::cout << "feed forward CPU" << std::endl;
+	net.print_network();
+	int n_threads = 128;
+	update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
+
 	start = clock();
-	net.feed_forward(d.get_training_dataset()->training_set[0]->input);
+	net.feed_forward(&(d.get_training_dataset()->training_set[0]));
 	finish = clock();
 	std::cout << "feed forward CPU time: " << ((float)(finish-start)) / CLOCKS_PER_SEC << "s\n\n";
 	//net.print_network();
 
-	FeatureVector **dv;
-	GPUNet::copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
+	TrainingDataSet *tset = d.get_training_dataset();
+	float *d_training_set;
+	GPUNet::copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
 	std::cout << "Testing method 1.2" << std::endl;
-	feed_forward_v1_2(dv[0]->input);
+	feed_forward_v1_2(d_training_set, 0);
 	std::cout << "Validates: " << validate_output(net.outputNeurons) << "\n";
-	//net.print_network();
-	//print_net();
+	net.print_network();
+	print_net();
 	CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));
 
-	std::cout << "Testing method 1.3" << std::endl;
-	feed_forward_v1_3(dv[0]->input);
-	std::cout << "Validates: " << validate_output(net.outputNeurons) << "\n";
+	//std::cout << "Testing method 1.3" << std::endl;
+	//feed_forward_v1_3(&(d_training_set[0]));
+	//std::cout << "Validates: " << validate_output(net.outputNeurons) << "\n";
 	//net.print_network();
 	//print_net();
-	CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));
+	//CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));
 
 	/*std::cout << "Testing method 2" << std::endl;
 	feed_forward_v2();
@@ -1251,56 +1267,58 @@ void GPUNet::test_feed_forward(Net &net, NetData &d) {
 	feed_forward_v2_2();
 	std::cout << "Validates: " << validates(net.outputNeurons) << "\n";
 	CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));*/
+
+	CUDA_CHECK_RETURN(cudaFree(d_training_set));
 }
 
 void GPUNet::test_backprop(Net &net, NetData &d) {
 	NetTrainer nt(&net);
-	//std::cout << "CPU net 0" << std::endl;
-	//net.print_network();
+	std::cout << "CPU net 0" << std::endl;
+	net.print_network();
 
-	net.feed_forward(d.get_training_dataset()->training_set[0]->input);
+	net.feed_forward(&(d.get_training_dataset()->training_set[0]));
 	//std::cout << "CPU net 1" << std::endl;
 	//net.print_network();
 
-	nt.backprop(d.get_training_dataset()->training_set[0]->target);
-	//std::cout << "CPU net 2" << std::endl;
-	//net.print_network();
+	nt.backprop(&(d.get_training_dataset()->training_set[0+n_input+1]));
+	std::cout << "CPU net 2" << std::endl;
+	net.print_network();
 
 	std::cout << "Testing backprop_v2" << std::endl;
-	FeatureVector **dv;
-	GPUNet::copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
+	TrainingDataSet *tset = d.get_training_dataset();
+	float *d_training_set;
+	GPUNet::copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
+	std::cout << std::endl << "GPU net 0" << std::endl;
+	print_net();
+	std::cout << std::endl;
 
-	//std::cout << std::endl << "GPU net 0" << std::endl;
-	//print_net();
-	//std::cout << std::endl;
-
-	feed_forward_v1_2(dv[0]->input);
+	int i = 0, t = n_input+1;
+	feed_forward_v1_2(d_training_set, i);
 	//std::cout << "GPU net 1" << std::endl;
 	//print_net();
 	//std::cout << std::endl;
 
 	//std::cout << "GPU net 2" << std::endl;
-	backprop_v2(dv[0]->input, dv[0]->target);
+	backprop_v2(d_training_set, i, t);
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	//print_net();
-	//std::cout << std::endl;
+	print_net();
+	std::cout << std::endl;
 	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
 
-//	net.feed_forward(d.get_training_dataset()->training_set[1]->input);
-//	nt.backprop(d.get_training_dataset()->training_set[1]->target);
-//	nt.update_weights();
-//	feed_forward_v1_2(dv[1]->input);
-//	backprop_v2(dv[1]->input, dv[1]->target);
-//
-//
+//	net.feed_forward(&(tset->training_set[tset->fpp]));
+//	nt.backprop(&(tset->training_set[tset->fpp+n_input+1]));
+//	i = tset->fpp, t = i+n_input+1;
+//	feed_forward_v1_2(d_training_set, i);
+//	backprop_v2(d_training_set, i, t);
 //	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
 }
 
 void GPUNet::run_parallel(Net &net, NetData &d) {
 	std::cout << "Running in parallel" <<std::endl;
 
-	FeatureVector **dv;
-	GPUNet::copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
+	TrainingDataSet *tset = d.get_training_dataset();
+	float *d_training_set;
+	GPUNet::copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
 
 	NetTrainer nt(&net);
 
@@ -1308,12 +1326,14 @@ void GPUNet::run_parallel(Net &net, NetData &d) {
 	std::string r = "";
 	while (true) {
 		std::cout << "Epoch " << e++ << std::endl;
-		for (int i = 0; i < d.get_training_dataset()->training_set.size(); ++i) {
-			net.feed_forward(d.get_training_dataset()->training_set[i]->input);
-			nt.backprop(d.get_training_dataset()->training_set[i]->target);
+		for (int i = 0; i < d.get_training_dataset()->n_training; ++i) {
+			int inp = i*tset->fpp;
+			int tar = inp+n_input+1;
+			net.feed_forward(&(d_training_set[inp]));
+			nt.backprop(&(d_training_set[tar]));
 
-			feed_forward_v1_2(dv[0]->input);
-			backprop_v2(dv[0]->input, dv[0]->target);
+			feed_forward_v1_2(d_training_set, inp);
+			backprop_v2(d_training_set, inp, tar);
 
 			std::cout << "CPU network" << std::endl;
 			net.print_network();
@@ -1355,138 +1375,19 @@ int GPUNet::get_current_device() {
 size_t GPUNet::dataset_size(TrainingDataSet *tset) {
 	size_t tset_size = 0;
 	int fv_size = (n_input + n_output) * sizeof(float);
-	tset_size += fv_size * tset->training_set.size();
-	tset_size += fv_size * tset->generalization_set.size();
-	tset_size += fv_size * tset->validation_set.size();
+	tset_size += fv_size * tset->n_training;
+	tset_size += fv_size * tset->n_generalization;
+	tset_size += fv_size * tset->n_validation;
 	return tset_size;
 }
 
 size_t GPUNet::total_dev_mem(int dev) {
 	cudaDeviceProp props;
 	cudaGetDeviceProperties(&props, dev);
-	return props.totalGlobalMem; // - 1611000000; //minus 1.5 gb
+	return props.totalGlobalMem - 1811000000 - 206688900; //minus 1.5 gb
 }
 
-
-
-/*
- * Copies the host vector to a pointer array on the host that holds pointers to FeatureVector on the device with bias node
- */
-void GPUNet::copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv) {
-	std::cout << "Copying data" << std::endl;
-	start = clock();
-
-	*dv = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
-	//FeatureVector** host_dv_tmp = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
-
-	for (size_t i = 0; i < hv.size(); ++i) {
-		//allocate device memory
-		FeatureVector *d_fv = (FeatureVector*)malloc(sizeof(FeatureVector*));
-
-		float *d_inp, *d_tar;
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_inp, (n_input+1)*sizeof(float)));
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_tar, (n_output)*sizeof(float)));
-
-		//TODO: cuda-memcheck claims there is an unspecified launch failure at this line...
-		CUDA_CHECK_RETURN(cudaMemcpy(d_inp, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpy(d_tar, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
-
-		d_fv->input = d_inp;
-		d_fv->target = d_tar;
-
-		//TODO: does setting all in parallel improve speed?
-		set_bias<<<1, 1>>>(n_input, d_inp);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-		(*dv)[i] = d_fv;
-	}
-	finish = clock();
-	std::cout << "Copy time: " << ((float)finish-start)/CLOCKS_PER_SEC << std::endl;
-}
-
-/**
- * Copy from pattern p_start to p_end to device
- * only allocate memory if \p allocate is true
- */
-void GPUNet::copy_to_device_host_array_ptrs_biased_section(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv,
-		int p_start, int p_end, bool allocate) {
-
-	std::cout << "Copying data, p_start = " << p_start << ", p_end = " << p_end << ", allocate = " << allocate << std::endl;
-	start = clock();
-
-	if (allocate) { // if the first epoch and the first section
-		*dv = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
-	}
-
-	for (int i = p_start, p = 0; i < p_end; ++i, ++p) {
-		if (allocate) {
-			//allocate device memory
-			FeatureVector *d_fv = (FeatureVector*)malloc(sizeof(FeatureVector*));
-
-			float *d_inp, *d_tar;
-			CUDA_CHECK_RETURN(cudaMalloc((void **)&d_inp, (n_input+1)*sizeof(float)));
-			CUDA_CHECK_RETURN(cudaMalloc((void **)&d_tar, (n_output)*sizeof(float)));
-
-			CUDA_CHECK_RETURN(cudaMemcpy(d_inp, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
-			CUDA_CHECK_RETURN(cudaMemcpy(d_tar, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
-
-			d_fv->input = d_inp;
-			d_fv->target = d_tar;
-
-			//NOTE: no need to synchronize since on default stream and
-			//next GPU function could not start until this one finishes
-			set_bias<<<1, 1>>>(n_input, d_inp);
-
-			(*dv)[p] = d_fv;
-		} else {
-			CUDA_CHECK_RETURN(cudaMemcpy((*dv)[p]->input, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
-			CUDA_CHECK_RETURN(cudaMemcpy((*dv)[p]->target, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
-		}
-	}
-	finish = clock();
-	std::cout << "Copy time: " << ((float)finish-start)/CLOCKS_PER_SEC << std::endl;
-}
-
-
-/**
- * Copy from pattern p_start to p_end to device
- * only allocate memory if \p allocate is true
- */
-void GPUNet::copy_to_device_host_array_ptrs_biased_section_stream(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv,
-		int p_start, int p_end, bool allocate, cudaStream_t stream) {
-
-	std::cout << "Copying data, p_start = " << p_start << ", p_end = " << p_end << ", allocate = " << allocate << std::endl;
-	start = clock();
-
-	if (allocate) { // if the first epoch and the first section
-		*dv = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
-	}
-
-	for (int i = p_start, p = 0; i < p_end; ++i, ++p) {
-		if (allocate) {
-			//allocate device memory
-			FeatureVector *d_fv = (FeatureVector*)malloc(sizeof(FeatureVector*));
-
-			float *d_inp, *d_tar;
-			CUDA_CHECK_RETURN(cudaMalloc((void **)&d_inp, (n_input+1)*sizeof(float)));
-			CUDA_CHECK_RETURN(cudaMalloc((void **)&d_tar, (n_output)*sizeof(float)));
-
-			CUDA_CHECK_RETURN(cudaMemcpyAsync(d_inp, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK_RETURN(cudaMemcpyAsync(d_tar, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice, stream));
-
-			d_fv->input = d_inp;
-			d_fv->target = d_tar;
-
-			//NOTE: no need to synchronize since on default stream and
-			//next GPU function could not start until this one finishes
-			set_bias<<<1, 1>>>(n_input, d_inp);
-
-			(*dv)[p] = d_fv;
-		} else {
-			CUDA_CHECK_RETURN(cudaMemcpyAsync((*dv)[p]->input, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK_RETURN(cudaMemcpyAsync((*dv)[p]->target, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice, stream));
-		}
-	}
-	finish = clock();
-	std::cout << "Copy time: " << ((float)finish-start)/CLOCKS_PER_SEC << std::endl;
+void GPUNet::copy_to_device(float* set, int n_patterns, int fpp, float **d_set) {
+	CUDA_CHECK_RETURN(cudaMalloc((void**)d_set, n_patterns*fpp*sizeof(float)));
+	CUDA_CHECK_RETURN(cudaMemcpy(*d_set, set, n_patterns*fpp*sizeof(float), cudaMemcpyHostToDevice));
 }

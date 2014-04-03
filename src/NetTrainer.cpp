@@ -115,11 +115,11 @@ void NetTrainer::train_net(TrainingDataSet *tset) {
 		float previousGAccuracy = generalizationSetAccuracy;
 
 		//use training set to train network
-		run_training_epoch(tset->training_set);
+		run_training_epoch(tset);
 
 		//get generalization set accuracy and MSE
-		generalizationSetAccuracy = net->get_set_accuracy(tset->generalization_set);
-		generalizationSetMSE = net->get_set_mse(tset->generalization_set);
+		generalizationSetAccuracy = net->get_set_accuracy(tset->generalization_set, tset->n_generalization, tset->fpp);
+		generalizationSetMSE = net->get_set_mse(tset->generalization_set, tset->n_generalization, tset->fpp);
 
 		//print out change in training /generalization accuracy (only if a change is greater than a percent)
 		if (ceil(previousTAccuracy) != ceil(trainingSetAccuracy) || ceil(previousGAccuracy) != ceil(generalizationSetAccuracy)) {
@@ -134,8 +134,8 @@ void NetTrainer::train_net(TrainingDataSet *tset) {
 	}//end while
 
 	//get validation set accuracy and MSE
-	validationSetAccuracy = net->get_set_accuracy(tset->validation_set);
-	validationSetMSE = net->get_set_mse(tset->validation_set);
+	validationSetAccuracy = net->get_set_accuracy(tset->validation_set, tset->n_validation, tset->fpp);
+	validationSetMSE = net->get_set_mse(tset->validation_set, tset->n_validation, tset->fpp);
 
 	//out validation accuracy and MSE
 	std::cout << std::endl << "Training Complete!!! - > Elapsed Epochs: " << epoch << std::endl;
@@ -149,17 +149,19 @@ void NetTrainer::train_net(TrainingDataSet *tset) {
  */
 
 
-void NetTrainer::run_training_epoch(thrust::host_vector<FeatureVector*> feature_vecs) {
+void NetTrainer::run_training_epoch(TrainingDataSet *tset) {
 	//incorrect patterns
 	int incorrectPatterns = 0;
 	float mse = 0;
 
 	//for every training pattern
-	for (int tp = 0; tp < (int) feature_vecs.size(); tp++) {
+	for (int tp = 0; tp < tset->n_training; tp++) {
 		//feed inputs through network and backpropagate errors
 
-		net->feed_forward(feature_vecs[tp]->input);
-		backprop(feature_vecs[tp]->target);
+		float* input = &(tset->training_set[tp*tset->fpp]);
+		float* target = &(tset->training_set[tp*tset->fpp+tset->n_input+1]);
+		net->feed_forward(input);
+		backprop(target);
 
 		//pattern correct flag
 		bool patternCorrect = true;
@@ -168,11 +170,11 @@ void NetTrainer::run_training_epoch(thrust::host_vector<FeatureVector*> feature_
 		for (int k = 0; k < net->n_output; k++) {
 			//pattern incorrect if desired and output differ
 			//std::cout << "orig: " << net->outputNeurons[k] << ", clamped: " << net->clamp_output(net->outputNeurons[k]) << ", target: " << feature_vecs[tp]->target[k] << std::endl;
-			if (net->clamp_output(net->outputNeurons[k]) != feature_vecs[tp]->target[k])
+			if (net->clamp_output(net->outputNeurons[k]) != net->clamp_output(target[k]))
 				patternCorrect = false;
 
 			//calculate MSE
-			mse += pow((net->outputNeurons[k] - feature_vecs[tp]->target[k]), 2);
+			mse += pow((net->outputNeurons[k] - target[k]), 2);
 		}
 
 		//if pattern is incorrect add to incorrect count
@@ -182,8 +184,8 @@ void NetTrainer::run_training_epoch(thrust::host_vector<FeatureVector*> feature_
 	}//end for
 
 	//update training accuracy and MSE
-	trainingSetAccuracy = 100 - ((float)incorrectPatterns/feature_vecs.size() * 100);
-	trainingSetMSE = mse / (net->n_output * feature_vecs.size());
+	trainingSetAccuracy = 100 - ((float)incorrectPatterns/tset->n_training * 100);
+	trainingSetMSE = mse / (net->n_output * tset->n_training);
 }
 
 //float NetTrainer::get_output_error_gradient(float target, float output) {
@@ -203,6 +205,7 @@ float NetTrainer::get_hidden_error_gradient(int j) {
 void NetTrainer::backprop(float* targets) {
 	//modify deltas between hidden and output layers
 	for (int k = 0; k < net->n_output; ++k) {
+		//std::cout << "targets["<<k<<"]="<<targets[k] << std::endl;
 		//get error gradient for every output node
 		outputErrorGradients[k] = NetTrainer::get_output_error_gradient(targets[k], net->outputNeurons[k]);
 
@@ -214,7 +217,7 @@ void NetTrainer::backprop(float* targets) {
 	}
 
 	/* --- prints ------ */
-	/*std::cout << "output error gradients: ";
+	std::cout << "output error gradients: ";
 	for (int k = 0; k < net->n_output; ++k) {
 		std::cout << "[g" << k << ": " << outputErrorGradients[k] << "], ";
 	}
@@ -226,7 +229,7 @@ void NetTrainer::backprop(float* targets) {
 			std::cout << "[d" << j << k << ": " << deltaHiddenOutput[j][k] << "], ";
 		}
 	}
-	std::cout << std::endl;*/
+	std::cout << std::endl;
 
 
 	//modify deltas between input and hidden layers
@@ -241,7 +244,7 @@ void NetTrainer::backprop(float* targets) {
 	}
 
 	/* --- prints ------ */
-	/*std::cout << "hidden error gradients: ";
+	std::cout << "hidden error gradients: ";
 	for (int k = 0; k < net->n_hidden; ++k) {
 		std::cout << "[g" << k << ": " << hiddenErrorGradients[k] << "], ";
 	}
@@ -253,7 +256,7 @@ void NetTrainer::backprop(float* targets) {
 			std::cout << "[d" << j << k << ": " << deltaInputHidden[j][k] << "], ";
 		}
 	}
-	std::cout << std::endl;*/
+	std::cout << std::endl;
 
 
 	//stochastic learning update the weights immediately
@@ -264,6 +267,7 @@ void NetTrainer::update_weights() {
 	//input -> hidden weights
 	for (int i = 0; i <= net->n_input; i++) {
 		for (int j = 0; j < net->n_hidden; j++) {
+			std::cout << "h_weight(" << i << ", " << j << ") = " << net->get_ih_weight(i,j) << ", h_deltas(" << i << ", " << j << ") = " << deltaInputHidden[i][j] << std::endl;
 			net->set_ih_weight(i, j, net->get_ih_weight(i, j) + deltaInputHidden[i][j]);
 		}
 	}

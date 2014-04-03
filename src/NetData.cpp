@@ -13,9 +13,9 @@
 #include <boost/lexical_cast.hpp>
 
 NetData::NetData() {
+	n_patterns = 0;
 	n_inputs = 0;
 	n_targets = 0;
-	training_data_end_index = 0;
 }
 
 NetData::~NetData() {
@@ -33,17 +33,18 @@ bool NetData::load_file(std::string fname) {
 	if (in.is_open()) {
 		std::string line;
 
+		//TODO: is there a way to load these straight into a pointer array and still do a random shuffle?
+
 		//read info line
 		getline(in, line);
 		std::vector<std::string> res;
 		boost::split(res, line, boost::is_space());
-		int num_vecs = boost::lexical_cast<int>(res[0]);
-		n_inputs = boost::lexical_cast<int>(res[1]);
-		n_targets = boost::lexical_cast<int>(res[2]);
+		n_patterns = boost::lexical_cast<unsigned int>(res[0]);
+		n_inputs = boost::lexical_cast<unsigned int>(res[1]);
+		n_targets = boost::lexical_cast<unsigned int>(res[2]);
 
 		std::cout << line << std::endl;
-		for (int i = 0; i < num_vecs; ++i) {
-
+		for (int i = 0; i < n_patterns; ++i) {
 			float *inputs = new float[n_inputs];
 			float *targets = new float[n_targets];
 
@@ -71,25 +72,45 @@ bool NetData::load_file(std::string fname) {
 		random_shuffle(data.begin(), data.end());
 
 		//split data set
-		training_data_end_index = (int) (1.0 * data.size());
+		int t_size = (int) (1.0 * data.size());
 
-		//training_data_end_index = (int) (0.6 * data.size());
-		//int gSize = (int) (ceil(0.2 * data.size()));
-		//int vSize = (int) (data.size() - training_data_end_index - gSize);
+		//t_size = (int) (0.6 * data.size());
+		//int g_size = (int) (ceil(0.2 * data.size()));
+		//int v_size = (int) (data.size() - t_size - g_size);
+		int g_size =0, v_size = 0;
+		tset.n_input = n_inputs;
+		tset.n_target = n_targets;
+		tset.fpp = tset.floats_per_pattern();
+
+		//allocate memory in data partitions and copy memory
+		int floats_per_pattern = tset.floats_per_pattern();
+		int num_floats_training = t_size*floats_per_pattern;
+		int num_floats_generalization = g_size*floats_per_pattern;
+		int num_floats_validation = v_size*floats_per_pattern;
+
+
+		tset.training_set = new float[num_floats_training];
+		tset.generalization_set = new float[num_floats_generalization];
+		tset.validation_set = new float[num_floats_validation];
+		tset.n_patterns = data.size();
+		tset.n_training = t_size;
+		tset.n_generalization = g_size;
+		tset.n_validation = v_size;
 
 		//training set
-		for (int i = 0; i < training_data_end_index; ++i)
-			tset.training_set.push_back(data[i]);
+		for (int i = 0; i < t_size; ++i) {
+			add_to_dataset(tset.training_set, floats_per_pattern, i);
+		}
 
 		//generalization set
-		/*for (int i = training_data_end_index; i < training_data_end_index + gSize; ++i)
-			tset.generalization_set.push_back(data[i]);
+		for (int i = 0; i < g_size; ++i) {
+			add_to_dataset(tset.generalization_set, floats_per_pattern, i);
+		}
 
 		//validation set
-		for (int i = training_data_end_index + gSize; i < (int)data.size(); i++)
-			tset.validation_set.push_back(data[i]);*/
-
-		tset.set_size(data.size());
+		for (int i = 0; i < v_size; i++) {
+			add_to_dataset(tset.validation_set, floats_per_pattern, i);
+		}
 
 		//print success
 		std::cout << "Data file: " << fname << std::endl;
@@ -97,12 +118,24 @@ bool NetData::load_file(std::string fname) {
 
 		//close file
 		in.close();
-
 		return true;
 	} else {
 		std::cout << "Could not open data file...\n";
 	}
 	return false;
+}
+
+void NetData::add_to_dataset(float* set, int floats_per_pattern, int i) {
+	int pos;
+	for (int j = 0; j < n_inputs; ++j) {
+		pos = i*floats_per_pattern+j;
+		set[pos] = data[i]->input[j];
+	}
+	set[i*floats_per_pattern+n_inputs] = 1; //set bias
+	for (int k = 0; k < n_targets; ++k) {
+		pos = i*floats_per_pattern+n_inputs+1+k;
+		set[pos] = data[i]->target[k];
+	}
 }
 
 TrainingDataSet* NetData::get_training_dataset() {
@@ -122,14 +155,32 @@ unsigned int NetData::num_targets() {
 }
 
 void NetData::print_loaded_patterns() {
-	for (unsigned int i = 0; i < tset.training_set.size(); ++i) {
-		FeatureVector *tp = tset.training_set[i];
+	for (unsigned int i = 0; i < tset.n_training; ++i) {
+		FeatureVector *tp = data[i];
 		for (int j = 0; j < n_inputs; ++j) {
 			std::cout << (*tp).input[j] << " ";
 		}
 		std::cout << ", ";
 		for (int k = 0; k < n_targets; ++k) {
 			std::cout <<(*tp).target[k] << " ";
+		}
+		std::cout << std::endl;
+	}
+}
+
+void NetData::print_loaded_patterns_flatted() {
+	for (unsigned int i = 0; i < tset.n_training; ++i) {
+		int fpp = tset.floats_per_pattern();
+		std::cout << "input: ";
+		for(int j = 0; j < tset.n_input; j++) {
+			int p = i*fpp+j;
+			std::cout << tset.training_set[p] << " ";
+		}
+		std::cout << ", bias: " << tset.training_set[i*fpp+tset.n_input] << ", ";
+		std::cout << "target: ";
+		for(int j = 0; j < tset.n_target; j++) {
+			int p = i*fpp+tset.n_input+1+j;
+			std::cout << tset.training_set[p] << " ";
 		}
 		std::cout << std::endl;
 	}

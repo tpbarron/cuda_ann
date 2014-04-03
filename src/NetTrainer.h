@@ -66,7 +66,7 @@ private:
 		return output * (1 - output) * (target - output);
 	}
 	float get_hidden_error_gradient(int j);
-	void run_training_epoch(thrust::host_vector<FeatureVector*> feature_vecs);
+	void run_training_epoch(TrainingDataSet *tset);
 
 };
 

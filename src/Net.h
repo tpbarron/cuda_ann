@@ -30,8 +30,8 @@ public:
 	float* wInputHidden;
 	float* wHiddenOutput;
 
-	float get_set_mse(thrust::host_vector<FeatureVector*> set);
-	float get_set_accuracy(thrust::host_vector<FeatureVector*> set);
+	float get_set_mse(float* set, int size, int fpp);
+	float get_set_accuracy(float* set, int size, int fpp);
 	void feed_forward(float *input);
 	int clamp_output(float a);
 

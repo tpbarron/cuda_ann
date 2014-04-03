@@ -67,13 +67,14 @@ void Profiler::cuda_stop() {
 float Profiler::profile_feed_forward_v1_2(NetData &d) {
 	std::cout << "Profiling feed forward v1.2 over " << iterations << " iterations." << std::endl;
 
-	FeatureVector **dv;
-	gnet->copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
+	TrainingDataSet *tset = d.get_training_dataset();
+	float *d_training_set;
+	gnet->copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
 
 	cuda_start();
 
 	for (int i = 0; i < iterations; ++i) {
-		gnet->feed_forward_v1_2(dv[0]->input);
+		gnet->feed_forward_v1_2(d_training_set, 0);
 	}
 
 	cuda_stop();
@@ -86,6 +87,7 @@ float Profiler::profile_feed_forward_v1_2(NetData &d) {
 
 	float milliseconds = 0;
 	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
+	CUDA_CHECK_RETURN(cudaFree(d_training_set));
 
 	float bw_effective = bytes_total / (milliseconds * 1e6);
 
@@ -99,7 +101,7 @@ float Profiler::profile_feed_forward_v1_3(NetData &d) {
 	std::cout << "Profiling feed forward v1.3 over " << iterations << " iterations." << std::endl;
 
 	FeatureVector **dv;
-	gnet->copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
+	//gnet->copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
 
 	cuda_start();
 
@@ -135,7 +137,7 @@ float Profiler::profile_feed_forward_v2_2(NetData &d) {
 	std::cout << "Profiling feed forward v2.2 over " << iterations << " iterations." << std::endl;
 
 	FeatureVector **dv;
-	gnet->copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
+	//gnet->copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
 
 	float *d_sums;
 	unsigned int n = pow2roundup((net->n_input+1));
@@ -162,19 +164,22 @@ float Profiler::profile_feed_forward_v2_2(NetData &d) {
 float Profiler::profile_backprop_v2(NetData &d) {
 	std::cout << "Profiling backprop v2 over " << iterations << " iterations." << std::endl;
 
-	FeatureVector **dv;
-	gnet->copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
+	TrainingDataSet *tset = d.get_training_dataset();
+	float *d_training_set;
+	gnet->copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
+
 
 	cuda_start();
 
 	for (int i = 0; i < iterations; ++i) {
-		gnet->backprop_v2(dv[0]->input, dv[0]->target);
+		gnet->backprop_v2(d_training_set, 0, gnet->n_input+1);
 	}
 
 
 	cuda_stop();
 	float milliseconds = 0;
 	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
+	CUDA_CHECK_RETURN(cudaFree(d_training_set));
 
 	std::cout << milliseconds << " ms" << std::endl;
 	return milliseconds;

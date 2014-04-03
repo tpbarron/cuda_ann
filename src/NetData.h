@@ -27,18 +27,20 @@ public:
 	unsigned int num_targets();
 
 	bool load_file(std::string fname);
+
+	void add_to_dataset(float* set, int floats_per_pattern, int i);
 	TrainingDataSet* get_training_dataset();
 
 	void print_loaded_patterns();
+	void print_loaded_patterns_flatted();
 
 private:
 
 	// storage
 	std::vector<FeatureVector*> data;
+	unsigned int n_patterns;
 	unsigned int n_inputs;
 	unsigned int n_targets;
-
-	int training_data_end_index;
 
 	//reference to training set
 	TrainingDataSet tset;
