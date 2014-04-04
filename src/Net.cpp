@@ -12,8 +12,9 @@
 #include <boost/lexical_cast.hpp>
 #include "Net.h"
 
+Net::Net() {}
 
-Net::Net(int ni, int nh, int no) {
+void Net::init(int ni, int nh, int no) {
 
 	Net::n_input = ni;
 	Net::n_hidden = nh;

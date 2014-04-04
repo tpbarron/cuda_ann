@@ -7,3 +7,9 @@
 * That means I need to be able to sum in less than 29 ms or so for there to be improvement.
 * I'm having trouble passing a pointer to an index of an array and still having the reduce kernel work as expected.
 
+
+NVidia GTX 660 graphics card
+Theoretical peak bandwidth = Specs say 144.2 gb / sec
+980 * 10^6 * 192 * 2 / 1024^3
+Hz       mem interface
+

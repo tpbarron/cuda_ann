@@ -35,6 +35,7 @@ public:
 	void train_net(TrainingDataSet *tset);
 
 	void backprop(float* targets);
+	void rprop(float* targets);
 	void update_weights();
 
 private:

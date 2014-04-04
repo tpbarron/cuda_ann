@@ -52,17 +52,23 @@ void test(GPUNet &gnet, Net &net, NetData &d) {
 	//gnet.test_reduction();
 }
 
+int main(int argc, char **argv) {
+	srand(time(NULL));
+	time_t start, stop;
 
-void process_args(int argc, char **argv) {
 	float l_rate, momentum;
 	int max_epochs, save_freq;
 	bool batch;
+	std::string dset, netf, fbase;
+
 	po::options_description desc("Allowed options");
 	desc.add_options()
 		("help,h", "produce help message")
-		("dataset,d", po::value<std::string>(), "data set file")
-		("loadnet,n", po::value<std::string>(), "load net file")
-		("profile,p", po::value<std::string>(), "profile GPU functions")
+		("dataset,d", po::value<std::string>(&dset), "data set file")
+		("loadnet,n", po::value<std::string>(&netf), "load net file")
+		("profile,p", po::bool_switch(), "profile GPU functions")
+		("test,t", po::bool_switch(), "test GPU functions")
+		("fbase,f", po::value<std::string>(&fbase)->default_value("itr"), "base name of net file when writing, default = [itr]_#.txt")
 		("l_rate,r", po::value<float>(&l_rate)->default_value(0.7), "learning rate, default = 0.7")
 		("momentum,m", po::value<float>(&momentum)->default_value(0.9), "momentum, default = 0.9")
 		("batch,b", po::value<bool>(&batch)->default_value(false), "batch update, default = 0 (false), will ignore momentum")
@@ -76,74 +82,109 @@ void process_args(int argc, char **argv) {
 	po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
 	po::notify(vm);
 
-	if (vm.count("dataset")) {
-		std::string dset = vm["dataset"].as<std::string>();
-	}
-	if (vm.count("loadnet")) {
-		std::string netf = vm["loadnet"].as<std::string>();
-	}
-	if (vm.count("l_rate")) {
-
-	}
-	if (vm.count("momentum")) {
-
-	}
-	if (vm.count("max_epochs")) {
-
-	}
-	if (vm.count("save_freq")) {
-
+	if (!vm.size()) {
+		std::cout << "Try: cuda_ann --help\n\n";
+		return 1;
 	}
 
-}
+	if (vm.count("help")) {
+		std::cout << desc << std::endl;;
+		return 1;
+	}
 
-int main(int argc, char **argv) {
-	srand(time(NULL));
-
-	time_t start, stop;
+	std::cout << dset << " " << netf << " " << l_rate << " " << momentum << " " << max_epochs << " " << save_freq << " " << batch << std::endl;
+	if (!vm.count("dataset")) {
+		std::cerr << "Must have dataset parameter" << std::endl;
+	}
 
 	NetData d;
-	//if (!d.load_file("datasets/face/face.dat.norm"))
-	if (!d.load_file("datasets/easy/and.dat"))
-		return 0; //if file did not load
-	//d.print_loaded_patterns();
-	//d.print_loaded_patterns_flatted();
+	if (!d.load_file(dset))
+		return 1; //if file did not load
 
-	Net net(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
-	GPUNet gnet(d.num_inputs(), d.num_targets(), GPUNetSettings::STANDARD);
+	GPUNet gnet;
+	Net net;
+	if (vm.count("loadnet")) {
+		std::cout << "Using netfile to initialize" << std::endl;
+		gnet.load_netfile(netf);
+	} else {
+		//init normally
+		net.init(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
+		gnet.init(d.num_inputs(), d.num_targets(), GPUNetSettings::STANDARD);
 
-	gnet.alloc_dev_mem();
-	gnet.init_from_net(net, d);
+		gnet.alloc_dev_mem();
+		gnet.init_from_net(net, d);
+	}
 
-//	gnet.init_net();
-//	gnet.print_net();
-//	std::cout << "Dev 0: " << gnet.current_mem_usage(0) << std::endl;
+	bool train = true;
+	if (vm["test"].as<bool>()) {
+		std::cout << "testing" <<std::endl;
+		test(gnet, net, d);
+		train = false;
+	}
+	if (vm["profile"].as<bool>()) {
+		std::cout << "profiling" << std::endl;
+		profile(gnet, net, d);
+		train = false;
+	}
+	if (train) {
+		gnet.set_base_file_name(fbase);
+		gnet.set_save_frequency(save_freq);
+		gnet.set_training_params(l_rate, momentum, batch);
+		gnet.set_stopping_conds(max_epochs, 100.0);
+		start = clock();
+		gnet.train_net_sectioned(d.get_training_dataset());
+		stop = clock();
+		std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
+	}
 
-//	test(gnet, net, d);
-//	profile(gnet, net, d);
-//	gnet.run_parallel(net, d);
-//	return 0;
+	CUDA_CHECK_RETURN(cudaDeviceReset());
+	std::cout << "Device reset" << std::endl;
 
-//	GPUNet gnet("nets/face.net");
+	return 0;
 
-	gnet.set_save_frequency(2);
-	gnet.set_training_params(0.9, 0.9, false);
-	gnet.set_stopping_conds(75, 95.0);
-	start = clock();
-	gnet.train_net_sectioned(d.get_training_dataset());
-	stop = clock();
-	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
-//	gnet.print_net();
-//	gnet.write_net("nets/face2.net");
-
-
-//	NetTrainer nt(&net);
-//	nt.set_stopping_conds(10000, 95);
-//	nt.set_training_params(.9, .9);
+//	NetData d;
+//	if (!d.load_file("datasets/face/face.dat.norm"))
+//	//if (!d.load_file("datasets/easy/breast_cancer.dat.norm"))
+//		return 0; //if file did not load
+//	//d.print_loaded_patterns();
+//	//d.print_loaded_patterns_flatted();
+//
+//	Net net(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
+//	GPUNet gnet(d.num_inputs(), d.num_targets(), GPUNetSettings::STANDARD);
+//
+//	gnet.alloc_dev_mem();
+//	gnet.init_from_net(net, d);
+//
+////	gnet.init_net();
+////	gnet.print_net();
+////	std::cout << "Dev 0: " << gnet.current_mem_usage(0) << std::endl;
+//
+////	test(gnet, net, d);
+////	profile(gnet, net, d);
+////	gnet.run_parallel(net, d);
+////	return 0;
+//
+////	GPUNet gnet("nets/face.net");
+//
+//	gnet.set_base_file_name("face");
+//	gnet.set_save_frequency(2);
+//	gnet.set_training_params(0.9, 0.9, false);
+//	gnet.set_stopping_conds(10, 95.0);
 //	start = clock();
-//	nt.train_net(d.get_training_dataset());
+//	gnet.train_net_sectioned(d.get_training_dataset());
 //	stop = clock();
-//	std::cout << "CPU time: " << ((double)stop - start) / CLOCKS_PER_SEC << std::endl;
+//	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
+////	gnet.print_net();
+////	gnet.write_net("nets/face2.net");
+//
+//
+////	NetTrainer nt(&net);
+////	nt.set_stopping_conds(1, 95);
+////	nt.set_training_params(.7, .9);
+////	start = clock();
+////	nt.train_net(d.get_training_dataset());
+////	stop = clock();
+////	std::cout << "CPU time: " << ((double)stop - start) / CLOCKS_PER_SEC << std::endl;
 
 	CUDA_CHECK_RETURN(cudaDeviceReset());
 	std::cout << "Device reset" << std::endl;

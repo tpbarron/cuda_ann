@@ -28,8 +28,8 @@
 20. Modify for arbitrary number of layers
 21. Calculate optimal block and grid sizes -- See [here](http://stackoverflow.com/questions/5810447/cuda-block-and-grid-size-efficiencies) to calculate params for kernels. Make threads a class field in some way so not defined as 128 in every function.
 22. Add feature selection to dataset processor
-23. Modify cuda_ann for command line input
-24. (DONE, ALMOST) Analyze kernels for memory coalescing. Change array indexing if necessary.
+23. (DONE) Modify cuda_ann for command line input
+24. (DONE) Analyze kernels for memory coalescing. Change array indexing if necessary.
   * This improved the time for one epoch on the face dataset (6977 2960 1) from 284 seconds to epoch to less than 57.
-  * Try adding device array that indexes in opposite manner
+  * Try using shared mem to access that require indexing in opposite manner
 

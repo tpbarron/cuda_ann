@@ -578,6 +578,10 @@ __global__ void print_input(int n_input, float *input) {
  * ---------- Constructors -------------
  */
 
+GPUNet::GPUNet() {
+
+}
+
 GPUNet::GPUNet(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type=GPUNetSettings::STANDARD) {
 	n_input = 0;
 	GPUNet::init_structure(ni, no, net_type);
@@ -622,6 +626,19 @@ GPUNet::~GPUNet() {
 	delete nio;
 }
 
+void GPUNet::load_netfile(std::string net_file) {
+	std::cout << "Initializing from net file: " << net_file << "." << std::endl;
+	GPUNet::init_nio();
+	GPUNet::read_net(net_file);
+}
+
+void GPUNet::init(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type) {
+	n_input = 0;
+	GPUNet::init_structure(ni, no, net_type);
+	GPUNet::init_vars();
+	GPUNet::init_nio();
+}
+
 /*
  * -------------- public ---------------
  */
@@ -657,6 +674,8 @@ void GPUNet::init_vars() {
 	desired_acc = GPUNetSettings::GPU_DESIRED_ACCURACY;
 	batching = GPUNetSettings::GPU_USE_BATCH;
 	save_freq = GPUNetSettings::GPU_SAVE_FREQUENCY;
+	base_file_name = GPUNetSettings::GPU_BASE_FILE_NAME;
+
 	CUDA_CHECK_RETURN(cudaGetDeviceCount(&n_gpus));
 
 	epoch = 0;
@@ -830,6 +849,10 @@ void GPUNet::set_stopping_conds(int me, float acc) {
 	desired_acc = acc;
 }
 
+void GPUNet::set_base_file_name(std::string f) {
+	base_file_name = f;
+}
+
 
 /*
  * to keep it simple, run in 1 thread
@@ -848,7 +871,7 @@ void GPUNet::print_net() {
  */
 bool GPUNet::write_net(std::string fname) {
 	//need to copy mse and acc back to host
-	copy_error_to_host();
+	copy_error_to_host(&trainingSetMSE, &trainingSetAccuracy);
 	std::cout << "current acc=" << trainingSetAccuracy << ", current mse=" << trainingSetMSE << std::endl;
 
 	if (!nio->write_net(fname)) {
@@ -877,6 +900,34 @@ bool GPUNet::read_net(std::string fname) {
 	return true;
 }
 
+
+void GPUNet::run_test_set(TrainingDataSet *tset) {
+	std::cout << std::endl << "Running test set: " << std::endl;
+
+	float* d_test_set;
+	//by default allocate array as large as possible
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_test_set, n_copyable_patterns*tset->fpp*sizeof(float)));
+	CUDA_CHECK_RETURN(cudaMemcpy(d_test_set, tset->validation_set, tset->n_validation*tset->fpp*sizeof(float), cudaMemcpyHostToDevice));
+
+	for (int i = 0; i < tset->n_validation; ++i) {
+		//wait for error calculation to finish before doing next feed forward iteration
+		CUDA_CHECK_RETURN(cudaStreamSynchronize(err_calc_stream));
+		//called with index of start position of target
+		feed_forward_v1_2(d_test_set, i*tset->fpp);
+		mse_sum_v2<<<1, 1, 0, err_calc_stream>>>(d_output, d_test_set, i*tset->fpp+n_input+1, n_output);
+		output_correct_v2<<<1, 1, 0, err_calc_stream>>>(d_output, d_test_set, i*tset->fpp+n_input+1, n_output);
+	}
+	calc_mse<<<1, 1, 0, err_calc_stream>>>(n_output, tset->n_validation);
+	calc_acc<<<1, 1, 0, err_calc_stream>>>(tset->n_validation);
+
+	copy_error_to_host(&validationSetMSE, &validationSetAccuracy);
+	std::cout << "Test set MSE = " << validationSetMSE << std::endl;
+	std::cout << "Test set ACC = " << validationSetAccuracy << std::endl;
+
+	//free training set
+	CUDA_CHECK_RETURN(cudaFree(d_test_set));
+}
+
 /*
  * run the input through the network
  */
@@ -887,19 +938,6 @@ float* GPUNet::evaluate(float* input) {
 	int threads = 128;
 	float *h_out = new float[n_output];
 	CUDA_CHECK_RETURN(cudaMemcpy((void*)d_input, (void*)input, (n_input+1)*sizeof(float), cudaMemcpyHostToDevice));
-	feed_forward_v1_2(d_input, 0);
-	clamp_outputs<<<(n_output+threads-1)/threads, threads>>>(d_output, n_output);
-	CUDA_CHECK_RETURN(cudaMemcpy(h_out, d_output, n_output*sizeof(float), cudaMemcpyDeviceToHost));
-	return h_out;
-}
-
-float* GPUNet::batch_evaluate(float** inputs) {
-	//copy to device
-	//feed forward
-	//copy back output
-	int threads = 128;
-	float *h_out = new float[n_output];
-	CUDA_CHECK_RETURN(cudaMemcpy((void*)d_input, (void*)inputs, n_input*sizeof(float), cudaMemcpyHostToDevice));
 	feed_forward_v1_2(d_input, 0);
 	clamp_outputs<<<(n_output+threads-1)/threads, threads>>>(d_output, n_output);
 	CUDA_CHECK_RETURN(cudaMemcpy(h_out, d_output, n_output*sizeof(float), cudaMemcpyDeviceToHost));
@@ -996,7 +1034,7 @@ void GPUNet::train_net_sectioned_overlap(TrainingDataSet *tset) {
 	//out validation accuracy and MSE
 	std::cout << std::endl << "Training complete. Elapsed epochs: " << epoch << std::endl;
 
-	copy_error_to_host();
+	copy_error_to_host(&trainingSetMSE, &trainingSetAccuracy);
 	std::cout << "MSE = " << trainingSetMSE << std::endl;
 	std::cout << "ACC = " << trainingSetAccuracy << std::endl;
 }
@@ -1023,7 +1061,7 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 			++epoch;
 
 			if (epoch % save_freq == 0) {
-				std::string fname = "nets/face_" + boost::lexical_cast<std::string>(epoch) + ".net";
+				std::string fname = "nets/" + base_file_name + "_" + boost::lexical_cast<std::string>(epoch) + ".net";
 				std::cout << "Writing intermediary net " << fname << std::endl;
 				write_net(fname);
 			}
@@ -1051,17 +1089,19 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 	//out validation accuracy and MSE
 	std::cout << std::endl << "Training complete. Elapsed epochs: " << epoch << std::endl;
 
-	copy_error_to_host();
+	copy_error_to_host(&trainingSetMSE, &trainingSetAccuracy);
 	std::cout << "MSE = " << trainingSetMSE << std::endl;
 	std::cout << "ACC = " << trainingSetAccuracy << std::endl;
 
 	//free training set
 	CUDA_CHECK_RETURN(cudaFree(d_training_set));
+
+	run_test_set(tset);
 }
 
-void GPUNet::copy_error_to_host() {
-	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&trainingSetMSE, d_mse, sizeof(float), 0, cudaMemcpyDeviceToHost));
-	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&trainingSetAccuracy, d_acc, sizeof(float), 0, cudaMemcpyDeviceToHost));
+void GPUNet::copy_error_to_host(float* mse, float* acc) {
+	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(mse, d_mse, sizeof(float), 0, cudaMemcpyDeviceToHost));
+	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(acc, d_acc, sizeof(float), 0, cudaMemcpyDeviceToHost));
 }
 
 
@@ -1231,9 +1271,7 @@ void GPUNet::test_feed_forward(Net &net, NetData &d) {
 	clock_t start, finish;
 
 	std::cout << "feed forward CPU" << std::endl;
-	net.print_network();
-	int n_threads = 128;
-	update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
+	//net.print_network();
 
 	start = clock();
 	net.feed_forward(&(d.get_training_dataset()->training_set[0]));
@@ -1247,8 +1285,8 @@ void GPUNet::test_feed_forward(Net &net, NetData &d) {
 	std::cout << "Testing method 1.2" << std::endl;
 	feed_forward_v1_2(d_training_set, 0);
 	std::cout << "Validates: " << validate_output(net.outputNeurons) << "\n";
-	net.print_network();
-	print_net();
+	//net.print_network();
+	//print_net();
 	CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));
 
 	//std::cout << "Testing method 1.3" << std::endl;
@@ -1273,24 +1311,24 @@ void GPUNet::test_feed_forward(Net &net, NetData &d) {
 
 void GPUNet::test_backprop(Net &net, NetData &d) {
 	NetTrainer nt(&net);
-	std::cout << "CPU net 0" << std::endl;
-	net.print_network();
+	//std::cout << "CPU net 0" << std::endl;
+	//net.print_network();
 
 	net.feed_forward(&(d.get_training_dataset()->training_set[0]));
 	//std::cout << "CPU net 1" << std::endl;
 	//net.print_network();
 
 	nt.backprop(&(d.get_training_dataset()->training_set[0+n_input+1]));
-	std::cout << "CPU net 2" << std::endl;
-	net.print_network();
+	//std::cout << "CPU net 2" << std::endl;
+	//net.print_network();
 
 	std::cout << "Testing backprop_v2" << std::endl;
 	TrainingDataSet *tset = d.get_training_dataset();
 	float *d_training_set;
 	GPUNet::copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
-	std::cout << std::endl << "GPU net 0" << std::endl;
-	print_net();
-	std::cout << std::endl;
+	//std::cout << std::endl << "GPU net 0" << std::endl;
+	//print_net();
+	//std::cout << std::endl;
 
 	int i = 0, t = n_input+1;
 	feed_forward_v1_2(d_training_set, i);
@@ -1301,7 +1339,7 @@ void GPUNet::test_backprop(Net &net, NetData &d) {
 	//std::cout << "GPU net 2" << std::endl;
 	backprop_v2(d_training_set, i, t);
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	print_net();
+	//print_net();
 	std::cout << std::endl;
 	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
 

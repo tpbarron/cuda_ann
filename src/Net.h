@@ -16,8 +16,10 @@
 class Net {
 
 public:
-	Net(int ni, int nh, int no);
+	Net();
 	~Net();
+
+	void init(int ni, int nh, int no);
 
 	//num neurons
 	int n_input, n_hidden, n_output;

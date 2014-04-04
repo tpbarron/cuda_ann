@@ -72,12 +72,10 @@ bool NetData::load_file(std::string fname) {
 		random_shuffle(data.begin(), data.end());
 
 		//split data set
-		int t_size = (int) (1.0 * data.size());
-
-		//t_size = (int) (0.6 * data.size());
-		//int g_size = (int) (ceil(0.2 * data.size()));
-		//int v_size = (int) (data.size() - t_size - g_size);
-		int g_size =0, v_size = 0;
+		int t_size = (int) (0.6 * data.size());
+		int g_size = (int) (ceil(0.2 * data.size()));
+		int v_size = (int) (data.size() - t_size - g_size);
+		//int t_size = (int) (1.0 * data.size()), g_size =0, v_size = 0;
 		tset.n_input = n_inputs;
 		tset.n_target = n_targets;
 		tset.fpp = tset.floats_per_pattern();
@@ -115,6 +113,7 @@ bool NetData::load_file(std::string fname) {
 		//print success
 		std::cout << "Data file: " << fname << std::endl;
 		std::cout << "Read complete: " << data.size() << " patterns loaded"  << std::endl;
+		std::cout << "Test set: " << tset.n_training << ", generalization set: " << tset.n_generalization << ", validation set: " << tset.n_validation << std::endl;
 
 		//close file
 		in.close();

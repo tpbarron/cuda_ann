@@ -1,0 +1,20 @@
+6977 2960 1
+Data file: datasets/face/face.dat.norm
+Read complete: 6977 patterns loaded
+Test set: 4186, generalization set: 1396, validation set: 1395
+Initializing CPU weights
+
+ Neural Network Training Starting: 
+==========================================================================
+ LR: 0.7, Momentum: 0.9, Max Epochs: 1
+ 2960 Input Neurons, 1974 Hidden Neurons, 1 Output Neurons
+==========================================================================
+
+Epoch: 0; Test Set Acc:65.6235%, MSE: 0.343577;	GSet Acc:64.1834%, MSE: 0.358166
+
+Training Complete!!! - > Elapsed Epochs: 1
+	Validation Set Accuracy: 64.1577
+	Validation Set MSE: 0.358423
+
+CPU time: 2240.39
+Device reset

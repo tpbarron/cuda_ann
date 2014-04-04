@@ -8,6 +8,8 @@
 #ifndef GPUNETSETTINGS_H_
 #define GPUNETSETTINGS_H_
 
+#include <string>
+
 namespace GPUNetSettings {
 
 	enum NetworkStructure {
@@ -27,6 +29,7 @@ namespace GPUNetSettings {
 
 	const int GPU_DEFAULT_BLOCK_SIZE = 128;
 
+	const std::string GPU_BASE_FILE_NAME = "iteration";
 }
 
 #endif /* GPUNETSETTINGS_H_ */

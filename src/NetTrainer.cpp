@@ -217,7 +217,7 @@ void NetTrainer::backprop(float* targets) {
 	}
 
 	/* --- prints ------ */
-	std::cout << "output error gradients: ";
+	/*std::cout << "output error gradients: ";
 	for (int k = 0; k < net->n_output; ++k) {
 		std::cout << "[g" << k << ": " << outputErrorGradients[k] << "], ";
 	}
@@ -229,7 +229,7 @@ void NetTrainer::backprop(float* targets) {
 			std::cout << "[d" << j << k << ": " << deltaHiddenOutput[j][k] << "], ";
 		}
 	}
-	std::cout << std::endl;
+	std::cout << std::endl;*/
 
 
 	//modify deltas between input and hidden layers
@@ -244,7 +244,7 @@ void NetTrainer::backprop(float* targets) {
 	}
 
 	/* --- prints ------ */
-	std::cout << "hidden error gradients: ";
+	/*std::cout << "hidden error gradients: ";
 	for (int k = 0; k < net->n_hidden; ++k) {
 		std::cout << "[g" << k << ": " << hiddenErrorGradients[k] << "], ";
 	}
@@ -256,7 +256,70 @@ void NetTrainer::backprop(float* targets) {
 			std::cout << "[d" << j << k << ": " << deltaInputHidden[j][k] << "], ";
 		}
 	}
+	std::cout << std::endl;*/
+
+
+	//stochastic learning update the weights immediately
+	update_weights();
+}
+
+
+void NetTrainer::rprop(float* targets) {
+	//modify deltas between hidden and output layers
+	for (int k = 0; k < net->n_output; ++k) {
+		//std::cout << "targets["<<k<<"]="<<targets[k] << std::endl;
+		//get error gradient for every output node
+		float prevOutputErrorGradient = outputErrorGradients[k];
+		outputErrorGradients[k] = NetTrainer::get_output_error_gradient(targets[k], net->outputNeurons[k]);
+
+		//for all nodes in hidden layer and bias neuron
+		for (int j = 0; j <= net->n_hidden; ++j) {
+			//calculate change in weight
+			deltaHiddenOutput[j][k] = l_rate * net->hiddenNeurons[j] * outputErrorGradients[k] + momentum * deltaHiddenOutput[j][k];
+		}
+	}
+
+	/* --- prints ------ */
+	/*std::cout << "output error gradients: ";
+	for (int k = 0; k < net->n_output; ++k) {
+		std::cout << "[g" << k << ": " << outputErrorGradients[k] << "], ";
+	}
 	std::cout << std::endl;
+
+	std::cout << "deltas hidden output: ";
+	for (int k = 0; k < net->n_output; ++k) {
+		for (int j = 0; j <= net->n_hidden; ++j) {
+			std::cout << "[d" << j << k << ": " << deltaHiddenOutput[j][k] << "], ";
+		}
+	}
+	std::cout << std::endl;*/
+
+
+	//modify deltas between input and hidden layers
+	for (int j = 0; j < net->n_hidden; ++j) {
+		//get error gradient for every hidden node
+		hiddenErrorGradients[j] = get_hidden_error_gradient(j);
+		//for all nodes in input layer and bias neuron
+		for (int i = 0; i <= net->n_input; ++i) {
+			//calculate change in weight
+			deltaInputHidden[i][j] = l_rate * net->inputNeurons[i] * hiddenErrorGradients[j] + momentum * deltaInputHidden[i][j];
+		}
+	}
+
+	/* --- prints ------ */
+	/*std::cout << "hidden error gradients: ";
+	for (int k = 0; k < net->n_hidden; ++k) {
+		std::cout << "[g" << k << ": " << hiddenErrorGradients[k] << "], ";
+	}
+	std::cout << std::endl;
+
+	std::cout << "deltas input hidden: ";
+	for (int k = 0; k < net->n_hidden; ++k) {
+		for (int j = 0; j <= net->n_input; ++j) {
+			std::cout << "[d" << j << k << ": " << deltaInputHidden[j][k] << "], ";
+		}
+	}
+	std::cout << std::endl;*/
 
 
 	//stochastic learning update the weights immediately
@@ -267,7 +330,7 @@ void NetTrainer::update_weights() {
 	//input -> hidden weights
 	for (int i = 0; i <= net->n_input; i++) {
 		for (int j = 0; j < net->n_hidden; j++) {
-			std::cout << "h_weight(" << i << ", " << j << ") = " << net->get_ih_weight(i,j) << ", h_deltas(" << i << ", " << j << ") = " << deltaInputHidden[i][j] << std::endl;
+			//std::cout << "h_weight(" << i << ", " << j << ") = " << net->get_ih_weight(i,j) << ", h_deltas(" << i << ", " << j << ") = " << deltaInputHidden[i][j] << std::endl;
 			net->set_ih_weight(i, j, net->get_ih_weight(i, j) + deltaInputHidden[i][j]);
 		}
 	}

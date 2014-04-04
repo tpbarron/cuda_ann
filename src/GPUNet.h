@@ -36,9 +36,13 @@ class GPUNet {
 
 public:
 
+	GPUNet();
 	GPUNet(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type);
 	GPUNet(std::string net_file);
 	~GPUNet();
+
+	void load_netfile(std::string net_file);
+	void init(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type);
 
 	void init_nio();
 	void init_structure(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type);
@@ -61,11 +65,14 @@ public:
 	void set_save_frequency(int f);
 	void set_desired_accuracy(float acc);
 	void set_stopping_conds(int me, float acc);
+	void set_base_file_name(std::string f);
+
+	void run_test_set(TrainingDataSet *tset);
 	void calc_dataset_parameters(TrainingDataSet *tset);
 	void train_net_sectioned(TrainingDataSet *tset);
 	void train_net_sectioned_overlap(TrainingDataSet *tset);
 
-	void copy_error_to_host();
+	void copy_error_to_host(float* mse, float* acc);
 
 	void feed_forward_v1_2(float *d_set, int inp);
 	void feed_forward_v1_3(float *d_inp);
@@ -75,7 +82,6 @@ public:
 	void rprop(float *d_inp, float *d_tar);
 
 	float* evaluate(float* input);
-	float* batch_evaluate(float** inputs);
 
 	bool validate_output(float* desired_output);
 	bool validate_weights(float *desired_ih_weights, float *desired_ho_weights);
@@ -108,6 +114,7 @@ public:
 	int n_copyable_patterns;
 	int n_sections;
 	int save_freq;
+	std::string base_file_name;
 
 	/*
 	 * GPU state
