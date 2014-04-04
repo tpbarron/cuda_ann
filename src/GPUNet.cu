@@ -409,7 +409,7 @@ __device__ float calc_hidden_gradient(int j, int nh, int no, float* hidden, floa
 	//get sum of hidden->output weights * output error gradients
 	float s = 0;
 	for (int k = 0; k < no; ++k)
-		s += d_ho_weights[(nh+1)*k + j]; //get_weight(d_ho_weights, nh, j, k) * output_err_gradients[k];
+		s += d_ho_weights[(nh+1)*k + j] * output_err_gradients[k]; //get_weight(d_ho_weights, nh, j, k) * output_err_gradients[k];
 
 	//return error gradient
 	return hidden[j] * (1 - hidden[j]) * s;
@@ -1384,7 +1384,7 @@ size_t GPUNet::dataset_size(TrainingDataSet *tset) {
 size_t GPUNet::total_dev_mem(int dev) {
 	cudaDeviceProp props;
 	cudaGetDeviceProperties(&props, dev);
-	return props.totalGlobalMem - 1811000000 - 206688900; //minus 1.5 gb
+	return props.totalGlobalMem; // - 1811000000 - 206688900; //minus 1.5 gb
 }
 
 void GPUNet::copy_to_device(float* set, int n_patterns, int fpp, float **d_set) {

@@ -103,8 +103,8 @@ int main(int argc, char **argv) {
 	time_t start, stop;
 
 	NetData d;
-	if (!d.load_file("datasets/face/face.dat.norm"))
-	//if (!d.load_file("datasets/easy/breast_cancer.dat.norm"))
+	//if (!d.load_file("datasets/face/face.dat.norm"))
+	if (!d.load_file("datasets/easy/and.dat"))
 		return 0; //if file did not load
 	//d.print_loaded_patterns();
 	//d.print_loaded_patterns_flatted();
@@ -133,8 +133,8 @@ int main(int argc, char **argv) {
 	gnet.train_net_sectioned(d.get_training_dataset());
 	stop = clock();
 	std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
-	//gnet.print_net();
-	//gnet.write_net("nets/face2.net");
+//	gnet.print_net();
+//	gnet.write_net("nets/face2.net");
 
 
 //	NetTrainer nt(&net);
