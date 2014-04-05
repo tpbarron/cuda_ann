@@ -19,7 +19,7 @@ class NetData {
 
 public:
 
-	NetData();
+	NetData(float tpct);
 	~NetData();
 
 	size_t num_feature_vecs();
@@ -28,7 +28,7 @@ public:
 
 	bool load_file(std::string fname);
 
-	void add_to_dataset(float* set, int floats_per_pattern, int i);
+	void add_to_dataset(float* set, int floats_per_pattern, int p, int i);
 	TrainingDataSet* get_training_dataset();
 
 	void print_loaded_patterns();
@@ -41,6 +41,7 @@ private:
 	unsigned int n_patterns;
 	unsigned int n_inputs;
 	unsigned int n_targets;
+	float t_set_pct;
 
 	//reference to training set
 	TrainingDataSet tset;

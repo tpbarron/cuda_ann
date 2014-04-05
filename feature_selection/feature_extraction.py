@@ -30,7 +30,9 @@ def load_data(dfile):
 
 
 def write_data(dfile, m):
-    f = open(dfile+".extract", 'w')
+    fname = dfile+".extract"
+    print "Writing to", fname
+    f = open(fname, 'w')
     n_patterns = len(outputs)
     n_input = m.shape[1]
     n_output = len(outputs[0])
@@ -47,12 +49,12 @@ def write_data(dfile, m):
     f.close()
 
 
-def k_rank_reduction(U, k):
+def k_rank_reduction(V, s, k):
     # kth largest singular value is always in the kth-1 index of s
     #s_k = numpy.zeros(k)
-
     # k singular vectors each with same num rows as orig
-    U_k = numpy.zeros((U.shape[0], k))
+    V_k = numpy.zeros((V.shape[0], k))
+
     # print "U_k1:", U_k
 
     # k singular vectors each with same num cols as orig
@@ -61,11 +63,11 @@ def k_rank_reduction(U, k):
     for i in range(k):
         #self.s_k[i] = self.s[i]
         # set the column of U_k
-        U_k[:,i] = U[:,i]
+        V_k[:,i] = V[:,i]
         # set the row of V_k
         #self.V_k[i] = self.V[i]
 
-    return U_k
+    return V_k
 
 def process_svd(m):
     U, s, V = svd(m, full_matrices=False)
@@ -94,17 +96,21 @@ if __name__ == "__main__":
     k = int(sys.argv[2])
 
     m = load_data(dfile)
-    norm(m)
-    sys.exit(1)
+    #norm(m)
+    #sys.exit(1)
 
     #RFE(m)
     #print m
     print "m:",m.size, m.shape
     U, s, V = process_svd(m)
+    print "U: ", U.shape, "s: ", s.shape, "V: ", V.shape
+
     #print V
-    U_k = k_rank_reduction(U, k)
-    print "U_k:", U_k.shape
+    V_k = k_rank_reduction(V, s, k)
+    print "V_k:", V_k.shape
+    #print V_k
+    #norm(V_k)
     #print "U:", U.shape
     #print "s:", s
     #print "V:", V.shape
-    write_data(dfile, U_k)
+    write_data(dfile, V_k)

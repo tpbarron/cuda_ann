@@ -12,7 +12,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 
-NetData::NetData() {
+NetData::NetData(float tpct) {
+	t_set_pct = tpct;
 	n_patterns = 0;
 	n_inputs = 0;
 	n_targets = 0;
@@ -72,9 +73,9 @@ bool NetData::load_file(std::string fname) {
 		random_shuffle(data.begin(), data.end());
 
 		//split data set
-		int t_size = (int) (0.6 * data.size());
-		int g_size = (int) (ceil(0.2 * data.size()));
-		int v_size = (int) (data.size() - t_size - g_size);
+		int t_size = (int) (t_set_pct * data.size());
+		//int g_size = (int) (ceil(0.2 * data.size()));
+		int v_size = (int) (data.size() - t_size);
 		//int t_size = (int) (1.0 * data.size()), g_size =0, v_size = 0;
 		tset.n_input = n_inputs;
 		tset.n_target = n_targets;
@@ -83,31 +84,31 @@ bool NetData::load_file(std::string fname) {
 		//allocate memory in data partitions and copy memory
 		int floats_per_pattern = tset.floats_per_pattern();
 		int num_floats_training = t_size*floats_per_pattern;
-		int num_floats_generalization = g_size*floats_per_pattern;
+		//int num_floats_generalization = g_size*floats_per_pattern;
 		int num_floats_validation = v_size*floats_per_pattern;
 
 
 		tset.training_set = new float[num_floats_training];
-		tset.generalization_set = new float[num_floats_generalization];
+		//tset.generalization_set = new float[num_floats_generalization];
 		tset.validation_set = new float[num_floats_validation];
 		tset.n_patterns = data.size();
 		tset.n_training = t_size;
-		tset.n_generalization = g_size;
+		//tset.n_generalization = g_size;
 		tset.n_validation = v_size;
 
 		//training set
 		for (int i = 0; i < t_size; ++i) {
-			add_to_dataset(tset.training_set, floats_per_pattern, i);
+			add_to_dataset(tset.training_set, floats_per_pattern, i, i);
 		}
 
 		//generalization set
-		for (int i = 0; i < g_size; ++i) {
-			add_to_dataset(tset.generalization_set, floats_per_pattern, i);
-		}
+		//for (int i = 0; i < g_size; ++i) {
+		//	add_to_dataset(tset.generalization_set, floats_per_pattern, i);
+		//}
 
 		//validation set
 		for (int i = 0; i < v_size; i++) {
-			add_to_dataset(tset.validation_set, floats_per_pattern, i);
+			add_to_dataset(tset.validation_set, floats_per_pattern, i, i+t_size);
 		}
 
 		//print success
@@ -124,16 +125,16 @@ bool NetData::load_file(std::string fname) {
 	return false;
 }
 
-void NetData::add_to_dataset(float* set, int floats_per_pattern, int i) {
+void NetData::add_to_dataset(float* set, int floats_per_pattern, int p, int i) {
+	//Add the ith pattern to dataset set at position p
 	int pos;
 	for (int j = 0; j < n_inputs; ++j) {
-		pos = i*floats_per_pattern+j;
-		set[pos] = data[i]->input[j];
+		set[p*floats_per_pattern+j] = data[i]->input[j];
 	}
-	set[i*floats_per_pattern+n_inputs] = 1; //set bias
+	set[p*floats_per_pattern+n_inputs] = 1; //set bias
 	for (int k = 0; k < n_targets; ++k) {
-		pos = i*floats_per_pattern+n_inputs+1+k;
-		set[pos] = data[i]->target[k];
+		//std::cout << data[i]->target[k] << std::endl;
+		set[p*floats_per_pattern+n_inputs+1+k] = data[i]->target[k];
 	}
 }
 
@@ -168,6 +169,7 @@ void NetData::print_loaded_patterns() {
 }
 
 void NetData::print_loaded_patterns_flatted() {
+	std::cout << "training set" << std::endl;
 	for (unsigned int i = 0; i < tset.n_training; ++i) {
 		int fpp = tset.floats_per_pattern();
 		std::cout << "input: ";
@@ -175,11 +177,27 @@ void NetData::print_loaded_patterns_flatted() {
 			int p = i*fpp+j;
 			std::cout << tset.training_set[p] << " ";
 		}
-		std::cout << ", bias: " << tset.training_set[i*fpp+tset.n_input] << ", ";
+		std::cout << ", bias: " << tset.training_set[i*fpp+tset.n_input] << "\n";
 		std::cout << "target: ";
 		for(int j = 0; j < tset.n_target; j++) {
 			int p = i*fpp+tset.n_input+1+j;
 			std::cout << tset.training_set[p] << " ";
+		}
+		std::cout << std::endl;
+	}
+	std::cout << "validation set" << std::endl;
+	for (unsigned int i = 0; i < tset.n_validation; ++i) {
+		int fpp = tset.floats_per_pattern();
+		std::cout << "input: ";
+		for(int j = 0; j < tset.n_input; j++) {
+			int p = i*fpp+j;
+			std::cout << tset.validation_set[p] << " ";
+		}
+		std::cout << ", bias: " << tset.validation_set[i*fpp+tset.n_input] << "\n";
+		std::cout << "target: ";
+		for(int j = 0; j < tset.n_target; j++) {
+			int p = i*fpp+tset.n_input+1+j;
+			std::cout << tset.validation_set[p] << " ";
 		}
 		std::cout << std::endl;
 	}

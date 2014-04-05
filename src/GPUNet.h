@@ -152,6 +152,7 @@ public:
 	float trainingSetMSE;
 	float validationSetMSE;
 	float generalizationSetMSE;
+	float delta_min, delta_max;
 
 	void run_training_epoch_dev(float *set, int n_features, int fpp);
 
