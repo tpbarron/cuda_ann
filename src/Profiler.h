@@ -29,8 +29,6 @@ public:
 
 	float profile_feed_forward_v1_2(NetData &d);
 	float profile_feed_forward_v2(NetData &d);
-	float profile_feed_forward_v1_3(NetData &d);
-	float profile_feed_forward_v2_2(NetData &d);
 
 	float profile_backprop_v2(NetData &d);
 	float profile_backprop_v3(NetData &d);

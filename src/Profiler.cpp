@@ -120,69 +120,6 @@ float Profiler::profile_feed_forward_v2(NetData &d) {
 	return milliseconds;
 }
 
-float Profiler::profile_feed_forward_v1_3(NetData &d) {
-	std::cout << "Profiling feed forward v1.3 over " << iterations << " iterations." << std::endl;
-
-	FeatureVector **dv;
-	//gnet->copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
-
-	cuda_start();
-
-	for (int i = 0; i < iterations; ++i) {
-		gnet->feed_forward_v1_3(dv[0]->input);
-	}
-
-	cuda_stop();
-
-	float milliseconds = 0;
-	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
-
-	std::cout << milliseconds << " ms" << std::endl;
-	return milliseconds;
-}
-
-
-inline int
-pow2roundup (int x)
-{
-    if (x < 0)
-        return 0;
-    --x;
-    x |= x >> 1;
-    x |= x >> 2;
-    x |= x >> 4;
-    x |= x >> 8;
-    x |= x >> 16;
-    return x+1;
-}
-
-float Profiler::profile_feed_forward_v2_2(NetData &d) {
-	std::cout << "Profiling feed forward v2.2 over " << iterations << " iterations." << std::endl;
-
-	FeatureVector **dv;
-	//gnet->copy_to_device_host_array_ptrs_biased(d.get_training_dataset()->training_set, &dv);
-
-	float *d_sums;
-	unsigned int n = pow2roundup((net->n_input+1));
-	std::cout << "pow2 = " << n << std::endl;
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_sums, n*(net->n_hidden)*sizeof(float)));
-	CUDA_CHECK_RETURN(cudaMemset(d_sums, 0, n*(net->n_hidden)*sizeof(float)));
-
-	cuda_start();
-
-	for (int i = 0; i < iterations; ++i) {
-		gnet->feed_forward_v2_2(n, dv[0]->input, d_sums);
-	}
-
-	cuda_stop();
-
-	float milliseconds = 0;
-	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
-
-	std::cout << milliseconds << " ms" << std::endl;
-	return milliseconds;
-}
-
 
 float Profiler::profile_backprop_v2(NetData &d) {
 	std::cout << "Profiling backprop v2 over " << iterations << " iterations." << std::endl;

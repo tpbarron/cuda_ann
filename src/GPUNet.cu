@@ -43,11 +43,13 @@ __device__ float get_random_range(float min, float max, int i, curandState *glob
  * n_layer is the number of nodes in the layer containing i.
  */
 __device__ __inline__ float get_weight(float* weights, int n_layer, int i, int j) {
-	return weights[(n_layer+1)*j + i];
+	//return weights[(n_layer+1)*j + i];
+	return weights[n_layer*i + j];
 }
 
 __device__ __inline__ void set_weight(float* weights, int n_layer, int i, int j, float v) {
-	weights[(n_layer+1)*j + i] = v;
+	//weights[(n_layer+1)*j + i] = v;
+	weights[n_layer*i + j] = v;
 }
 
 /**
@@ -224,6 +226,7 @@ __global__ void feed_forward_layer_v1(int n_layer1, int n_layer2, float* layer1,
 	float r = 0;
 	for (int i = 0; i <= n_layer1; ++i) { //include bias
 		r += layer1[i] * get_weight(weights, n_layer1, i, n);
+
 	}
 	layer2[n] = sigmoid(r);
 }
@@ -237,7 +240,8 @@ __global__ void feed_forward_layer_v1_2(int n_layer1, int n_layer2, float* layer
 		float r = 0;
 		for (int i = 0; i <= n_layer1; ++i) { //include bias
 			//r += layer1[i] * weights[(n_layer1+1)*n + i];
-			r += layer1[i] * get_weight(weights, n_layer1, i, n);
+			//r += layer1[i] * get_weight(weights, n_layer1, i, n);
+			r += layer1[i] * get_weight(weights, n_layer2, i, n);
 			//printf("l2: n=%d, r=%f, input[%d]=%f, weight[%d,%d]=%f, t = %f\n", n, r, i, layer1[i],i,n,weights[(n_layer1+1)*n+i], (layer1[i] * weights[(n_layer1+1)*n + i]) );
 		}
 		layer2[n] = sigmoid(r);
@@ -252,7 +256,8 @@ __global__ void feed_forward_layer_v1_2_flat(int n_layer1, int n_layer2, float* 
 		float r = 0;
 		for (int i = 0; i <= n_layer1; ++i) { //include bias
 			//r += layer1[i] * weights[(n_layer1+1)*n + i];
-			r += layer1[i] * get_weight(weights, n_layer1, i, n);
+			//r += layer1[i] * get_weight(weights, n_layer1, i, n);
+			r += layer1[i] * get_weight(weights, n_layer2, i, n);
 			//printf("l1: n=%d, r=%f, input[%d]=%f, weight[%d,%d]=%f, t = %f\n", n, r, i, layer1[i],i,n,weights[(n_layer1+1)*n+i], (layer1[i] * weights[(n_layer1+1)*n + i]) );
 		}
 		//printf("n = %d, sigmoid(%f)=%f\n",n, r,sigmoid(r));
@@ -263,7 +268,7 @@ __global__ void feed_forward_layer_v1_2_flat(int n_layer1, int n_layer2, float* 
 /*
  * calc each term of linear combination in separate thread,
  * store in shared memory. So reduction in same kernel.
- * Works only if num inputs is less than reasonable blocksize, probably 128.
+ * Works only if num inputs is less than reasonable blocksize, probably 1024 max.
  *
  */
 
@@ -277,8 +282,9 @@ __global__ void feed_forward_layer_v2(int n_layer1, int n_layer2, float* layer1,
 	terms[tid] = 0;
 
 	if (n < n_layer2 && tid <= n_layer1)
-		terms[tid] = layer1[tid] * get_weight(weights, n_layer1, tid, n);
+		//terms[tid] = layer1[tid] * get_weight(weights, n_layer1, tid, n);
 		//terms[tid] = layer1[tid] * weights[(n_layer1+1)*n + tid];
+		terms[tid] = layer1[tid] * get_weight(weights, n_layer2, tid, n);
 
 	__syncthreads();
 //	if (terms[tid] != 0)
@@ -314,7 +320,8 @@ __global__ void feed_forward_layer_v2_flat(int n_layer1, int n_layer2, float* d_
 
 	if (n < n_layer2 && tid <= n_layer1) {
 		float *layer1 = &(d_set[ind]);
-		terms[tid] = layer1[tid] * get_weight(weights, n_layer1, tid, n);
+		//terms[tid] = layer1[tid] * get_weight(weights, n_layer1, tid, n);
+		terms[tid] = layer1[tid] * get_weight(weights, n_layer2, tid, n);
 		//terms[tid] = layer1[tid] * weights[(n_layer1+1)*n + tid];
 	}
 
@@ -416,6 +423,7 @@ __global__ void reduce_kernel(float *g_idata, float *g_odata, unsigned int n, in
 	sdata[tid] = 0;
 	while (i < n) { sdata[tid] += g_idata[i] + g_idata[i+blockSize]; i += gridSize; }
 	__syncthreads();
+
 	if (blockSize >= 512) { if (tid < 256) { sdata[tid] += sdata[tid + 256]; } __syncthreads(); }
 	if (blockSize >= 256) {if (tid < 128) { sdata[tid] += sdata[tid + 128]; } __syncthreads(); }
 	if (blockSize >= 128) {if (tid < 64) { sdata[tid] += sdata[tid + 64]; } __syncthreads(); }
@@ -473,9 +481,12 @@ __global__ void update_hidden_output_deltas_v2(int nh, int no, float l_rate, flo
 
 	if (x < (nh+1)*no) { // if in range
 		//NOTE: this was my bug, had (x % nh) not (x % (nh+1))
-		int j = x % (nh+1); //hidden node
-		//int k = x % no; //output node
-		int k = x / (nh+1);
+		//int j = x % (nh+1); //hidden node
+		//int k = x / (nh+1);
+
+		int j = x / no;
+		int k = x % no;
+
 		//delta_ho[nh*k + j] = l_rate * hidden[j]hidden_err_grad * output_err_gradients[k] + momentum * delta_ho[nh*k + j];
 
 		//NOTE: likely to be more hidden nodes than output nodes so more advantageous to keep j coalesced
@@ -494,7 +505,8 @@ __device__ __inline__ float calc_hidden_gradient(int j, int nh, int no, float* h
 	//get sum of hidden->output weights * output error gradients
 	float s = 0;
 	for (int k = 0; k < no; ++k)
-		s += get_weight(d_ho_weights, nh, j, k) * output_err_gradients[k];
+		//s += get_weight(d_ho_weights, nh, j, k) * output_err_gradients[k];
+		s += get_weight(d_ho_weights, no, j, k) * output_err_gradients[k];
 		//s += d_ho_weights[(nh+1)*k + j] * output_err_gradients[k];
 
 	//return error gradient
@@ -530,13 +542,13 @@ __global__ void hidden_error_gradients_v3(int nh, int no, float* hidden, float* 
 	terms[tid] = 0;
 
 	if (j < nh && tid < no) { //no bias on output so not <=
-		terms[tid] = get_weight(d_ho_weights, nh, j, tid) * output_err_gradients[tid];
+		//terms[tid] = get_weight(d_ho_weights, nh, j, tid) * output_err_gradients[tid];
+		terms[tid] = get_weight(d_ho_weights, no, j, tid) * output_err_gradients[tid];
 		//terms[tid] = d_ho_weights[(nh+1)*tid + j] * output_err_gradients[tid];
 	}
 
 	__syncthreads();
 
-	if (blockSize >= 512) { if (tid < 256) { terms[tid] += terms[tid + 256]; } __syncthreads(); }
 	if (blockSize >= 256) {if (tid < 128) { terms[tid] += terms[tid + 128]; } __syncthreads(); }
 	if (blockSize >= 128) {if (tid < 64) { terms[tid] += terms[tid + 64]; } __syncthreads(); }
 	if (tid < 32) { if (blockSize >= 64) terms[tid] += terms[tid + 32];
@@ -562,9 +574,11 @@ __global__ void update_input_hidden_deltas_v2(int ni, int nh, float l_rate, floa
 
 	if (x < (ni+1)*nh) {
 		float *input = &(d_set[i]);
-		int i = x % (ni+1); //input node, NOTE: same bug as before
-		//int j = x % nh; //hidden node
-		int j = x / (ni+1);
+		//int i = x % (ni+1); //input node, NOTE: same bug as before
+		//int j = x / (ni+1);
+
+		int i = x / nh;
+		int j = x % nh;
 
 		//delta_ih[ni*j + i] = l_rate * input[i] * hidden_err_gradients[j] + momentum * delta_ih[ni*j + i];
 
@@ -918,7 +932,7 @@ void GPUNet::alloc_dev_mem() {
  * I can have identical networks.
  */
 void GPUNet::init_from_net(Net &net, NetData &d) {
-	int threads = 128;
+	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 
 	//copy first pattern to input neurons so it is copied to device, instead of zeros
 	for (int i = 0; i < net.n_input; ++i) {
@@ -944,7 +958,7 @@ void GPUNet::init_from_net(Net &net, NetData &d) {
 
 
 void GPUNet::init_net() {
-	int threads = 128;
+	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 
 	//init nodes to all 0
 	init_nodes_layer_v2<<<(n_input+1+threads-1)/threads, threads>>>(n_input+1, d_input);
@@ -1037,7 +1051,7 @@ bool GPUNet::read_net(std::string fname) {
 		return false;
 	}
 
-	int threads = 128;
+	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 	//init nodes to 0
 	init_nodes_layer_v2<<<(n_input+1+threads-1)/threads, threads>>>(n_input+1, d_input);
 	init_nodes_layer_v2<<<(n_hidden+1+threads-1)/threads, threads>>>(n_hidden+1, d_hidden);
@@ -1085,7 +1099,7 @@ float* GPUNet::evaluate(float* input) {
 	//copy to device
 	//feed forward
 	//copy back output
-	int threads = 128;
+	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 	float *h_out = new float[n_output];
 	CUDA_CHECK_RETURN(cudaMemcpy((void*)d_input, (void*)input, (n_input+1)*sizeof(float), cudaMemcpyHostToDevice));
 	feed_forward_v1_2(d_input, 0);
@@ -1256,7 +1270,7 @@ void GPUNet::copy_error_to_host(float* mse, float* acc) {
 
 
 void GPUNet::run_training_epoch_dev(float *set, int n_features, int fpp) {
-	int n_threads = 128;
+	int n_threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 	start = clock();
 	for (int i = 0; i < n_features; ++i) {
 		//called with index of start position of target
@@ -1282,7 +1296,7 @@ void GPUNet::run_training_epoch_dev(float *set, int n_features, int fpp) {
 
 
 void GPUNet::backprop_v2(float* d_set, int i, int t) {
-	int n_threads = 128;
+	int n_threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 
 	//maintain mse state
 	mse_sum_v2<<<1, 1, 0, err_calc_stream>>>(d_output, d_set, t, n_output);
@@ -1332,7 +1346,7 @@ void GPUNet::backprop_v2(float* d_set, int i, int t) {
 
 
 void GPUNet::backprop_v3(float* d_set, int i, int t) {
-	int n_threads = 128;
+	int n_threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 
 	//maintain mse state
 	mse_sum_v2<<<1, 1, 0, err_calc_stream>>>(d_output, d_set, t, n_output);
@@ -1404,7 +1418,7 @@ void GPUNet::backprop_v3(float* d_set, int i, int t) {
 }
 
 void GPUNet::rprop(float *d_inp, float *d_tar) {
-	int n_threads = 128;
+	//int n_threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 	//calc hidden out gradients
 	//
 
@@ -1412,7 +1426,7 @@ void GPUNet::rprop(float *d_inp, float *d_tar) {
 
 
 void GPUNet::feed_forward_v1_2(float* d_set, int i) {
-	int threads = 128;
+	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 	feed_forward_layer_v1_2_flat<<<(n_hidden+threads-1)/threads, threads>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
 	feed_forward_layer_v1_2<<<(n_output+threads-1)/threads, threads>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 }
@@ -1470,45 +1484,6 @@ void GPUNet::feed_forward_v2(float* d_set, int i) {
 	}
 }
 
-void GPUNet::feed_forward_v1_3(float *d_inp) {
-	int threads = 128;
-	feed_forward_layer_v1_3<<<(n_hidden+threads-1)/threads, threads, threads*sizeof(float)>>>(n_input, n_hidden, d_inp, d_hidden, d_ih_weights);
-	feed_forward_layer_v1_3<<<(n_output+threads-1)/threads, threads, threads*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-}
-
-
-void GPUNet::feed_forward_v2_2(unsigned int pow2, float *d_inp, float *d_sums) {
-	int threads = 128;
-	feed_forward_layer_v2_2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(pow2, n_input, n_hidden, d_inp, d_hidden, d_ih_weights, d_sums);
-
-
-	float *h_sums, *h_tmp;
-	h_sums = (float*)malloc(pow2*(n_hidden)*sizeof(float));
-	memset(h_sums, 0, pow2*(n_hidden)*sizeof(float));
-	h_tmp = (float*)malloc(pow2*sizeof(float));
-	memset(h_tmp, 0, pow2*sizeof(float));
-
-	CUDA_CHECK_RETURN(cudaMemcpy(h_sums, d_sums, pow2*(n_hidden)*sizeof(float), cudaMemcpyDeviceToHost));
-	for (int i = 0; i < pow2*(n_hidden); ++i) {
-		std::cout << h_sums[i] << " ";
-	}
-	std::cout << std::endl;
-
-	float *d_tmp;
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_tmp, pow2*sizeof(float)));
-	CUDA_CHECK_RETURN(cudaMemset(d_tmp, 0, pow2*sizeof(float)));
-	//reduce_kernel<128><<<(pow2+threads-1)/threads, threads, threads*sizeof(float)>>>(d_sums, d_tmp, pow2, 0);
-
-	reduce_kernel<128><<<(pow2+threads-1)/threads, threads, threads*sizeof(float)>>>(d_sums, d_tmp, pow2, 1);
-
-	CUDA_CHECK_RETURN(cudaMemcpy(h_tmp, d_tmp, pow2*sizeof(float), cudaMemcpyDeviceToHost));
-	for (int i = 0; i < pow2; ++i) {
-		std::cout << h_tmp[i] << " ";
-	}
-	std::cout << std::endl;
-
-	//compute_activation_v2<<<(n_hidden+threads-1)/n_hidden, threads>>>(d_hidden, d_sums_l1, n_hidden, n_input+1);
-}
 
 bool GPUNet::validate_output(float* desired_output) {
 	//copy output back to host
@@ -1543,23 +1518,20 @@ bool GPUNet::validate_weights(float *desired_ih_weights, float *desired_ho_weigh
 
 
 void GPUNet::test_feed_forward(Net &net, NetData &d) {
-	clock_t start, finish;
-
-	std::cout << "feed forward CPU" << std::endl;
+	std::cout << "Testing feed forward functions" << std::endl;
+	//std::cout << "feed forward CPU" << std::endl;
 	//net.print_network();
 
-	start = clock();
 	net.feed_forward(&(d.get_training_dataset()->training_set[0]));
-	finish = clock();
-	std::cout << "feed forward CPU time: " << ((float)(finish-start)) / CLOCKS_PER_SEC << "s\n\n";
+	//std::cout << "feed forward CPU time: " << ((float)(finish-start)) / CLOCKS_PER_SEC << "s\n\n";
 	//net.print_network();
 
 	TrainingDataSet *tset = d.get_training_dataset();
 	float *d_training_set;
 	GPUNet::copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
-	std::cout << "Testing method 1.2" << std::endl;
+	std::cout << "Testing feedforward v1.2" << std::endl;
 	feed_forward_v1_2(d_training_set, 0);
-	std::cout << "Validates: " << validate_output(net.outputNeurons) << "\n";
+	std::cout << "Validates: " << validate_output(net.outputNeurons) << std::endl << std::endl;
 	//net.print_network();
 	//print_net();
 	CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));
@@ -1571,9 +1543,9 @@ void GPUNet::test_feed_forward(Net &net, NetData &d) {
 	//print_net();
 	//CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));
 
-	std::cout << "Testing method 2" << std::endl;
+	std::cout << "Testing feedforward v2" << std::endl;
 	feed_forward_v2(d_training_set, 0);
-	std::cout << "Validates: " << validate_output(net.outputNeurons) << "\n";
+	std::cout << "Validates: " << validate_output(net.outputNeurons) << std::endl << std::endl;
 	CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));
 
 
@@ -1586,6 +1558,7 @@ void GPUNet::test_feed_forward(Net &net, NetData &d) {
 }
 
 void GPUNet::test_backprop(Net &net, NetData &d) {
+	std::cout << "Testing backpropagation functions" << std::endl;
 	NetTrainer nt(&net);
 	//std::cout << "CPU net 0" << std::endl;
 	//net.print_network();
@@ -1598,33 +1571,34 @@ void GPUNet::test_backprop(Net &net, NetData &d) {
 	//std::cout << "CPU net 2" << std::endl;
 	//net.print_network();
 
-	std::cout << "Testing backprop_v2" << std::endl;
+	int i = 0, t = n_input+1;
 	TrainingDataSet *tset = d.get_training_dataset();
 	float *d_training_set;
 	GPUNet::copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
-//	//std::cout << std::endl << "GPU net 0" << std::endl;
-//	//print_net();
-//	//std::cout << std::endl;
+
+//	std::cout << "Testing backprop v2" << std::endl;
+////	std::cout << std::endl << "GPU net 0" << std::endl;
+////	print_net();
+////	std::cout << std::endl;
 //
-//	int i = 0, t = n_input+1;
 //	feed_forward_v1_2(d_training_set, i);
-//	//std::cout << "GPU net 1" << std::endl;
-//	//print_net();
-//	//std::cout << std::endl;
+////	std::cout << "GPU net 1" << std::endl;
+////	print_net();
+////	std::cout << std::endl;
 //
-//	//std::cout << "GPU net 2" << std::endl;
+////	std::cout << "GPU net 2" << std::endl;
 //	backprop_v2(d_training_set, i, t);
 //	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-//	//print_net();
-//	std::cout << std::endl;
-//	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
+////	print_net();
+////	std::cout << std::endl;
+//	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl << std::endl;
 
 
-	std::cout << "Testing backprop_v3" << std::endl;
+	std::cout << "Testing backprop v3" << std::endl;
 	//std::cout << std::endl << "GPU net 0" << std::endl;
 	//print_net();
 	//std::cout << std::endl;
-	int i = 0, t = n_input+1;
+	//int i = 0, t = n_input+1;
 	feed_forward_v1_2(d_training_set, i);
 	//std::cout << "GPU net 1" << std::endl;
 	//print_net();
@@ -1634,8 +1608,8 @@ void GPUNet::test_backprop(Net &net, NetData &d) {
 	backprop_v3(d_training_set, i, t);
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	//print_net();
-	std::cout << std::endl;
-	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
+	//std::cout << std::endl;
+	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl << std::endl;
 
 //	net.feed_forward(&(tset->training_set[tset->fpp]));
 //	nt.backprop(&(tset->training_set[tset->fpp+n_input+1]));

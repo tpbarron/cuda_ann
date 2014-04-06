@@ -12,7 +12,16 @@
 #include <boost/lexical_cast.hpp>
 #include "Net.h"
 
-Net::Net() {}
+Net::Net() {
+	Net::inputNeurons = NULL;
+	Net::hiddenNeurons = NULL;
+	Net::outputNeurons = NULL;
+	n_input = 0;
+	n_hidden = 0;
+	n_output = 0;
+	Net::wInputHidden = NULL;
+	Net::wHiddenOutput = NULL;
+}
 
 void Net::init(int ni, int nh, int no) {
 
@@ -131,19 +140,23 @@ void Net::print_network() {
  * 1D arrays.
  */
 float Net::get_ih_weight(int i, int h) {
-	return Net::wInputHidden[(Net::n_input+1)*h + i];
+	//return Net::wInputHidden[(Net::n_input+1)*h + i];
+	return Net::wInputHidden[(Net::n_hidden)*i + h];
 }
 
 float Net::get_ho_weight(int h, int o) {
-	return Net::wHiddenOutput[(Net::n_hidden+1)*o + h];
+	//return Net::wHiddenOutput[(Net::n_hidden+1)*o + h];
+	return Net::wHiddenOutput[(Net::n_output)*h + o];
 }
 
 void Net::set_ih_weight(int i, int h, float w) {
-	Net::wInputHidden[(Net::n_input+1)*h + i] = w;
+	//Net::wInputHidden[(Net::n_input+1)*h + i] = w;
+	Net::wInputHidden[(Net::n_hidden)*i + h] = w;
 }
 
 void Net::set_ho_weight(int h, int o, float w) {
-	Net::wHiddenOutput[(Net::n_hidden+1)*o + h] = w;
+	//Net::wHiddenOutput[(Net::n_hidden+1)*o + h] = w;
+	Net::wHiddenOutput[(Net::n_output)*h + o] = w;
 }
 
 
