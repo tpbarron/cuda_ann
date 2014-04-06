@@ -468,7 +468,7 @@ __global__ void update_hidden_output_deltas_v2(int nh, int no, float l_rate, flo
 		int j = x % (nh+1); //hidden node
 		//int k = x % no; //output node
 		int k = x / (nh+1);
-		//delta_ho[nh*k + j] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[nh*k + j];
+		//delta_ho[nh*k + j] = l_rate * hidden[j]hidden_err_grad * output_err_gradients[k] + momentum * delta_ho[nh*k + j];
 
 		//NOTE: likely to be more hidden nodes than output nodes so more advantageous to keep j coalesced
 		delta_ho[x] = l_rate * hidden[j] * output_err_gradients[k] + momentum * delta_ho[x];
@@ -505,6 +505,43 @@ __global__ void hidden_error_gradients_v2(int nh, int no, float* hidden, float* 
 }
 
 /*
+ * num blocks = num hidden nodes
+ * num threads per block = 128, 256 etc
+ *
+ * This can be used as long as the number of output nodes is less than 128 or say 256.
+ * If the output is a single node the other way is likely faster.
+ */
+template <unsigned int blockSize>
+__global__ void hidden_error_gradients_v3(int nh, int no, float* hidden, float* d_ho_weights, float* hidden_err_gradients, float* output_err_gradients) {
+	extern __shared__ float terms[]; // the number of terms will be equal to the number of output nodes
+
+	unsigned int j = blockIdx.x; //hidden node gradient to compute
+	unsigned int tid = threadIdx.x; //
+
+	terms[tid] = 0;
+
+	if (j < nh && tid < no) { //no bias on output so not <=
+		terms[tid] = d_ho_weights[(nh+1)*tid + j] * output_err_gradients[tid];
+	}
+
+	__syncthreads();
+
+	if (blockSize >= 512) { if (tid < 256) { terms[tid] += terms[tid + 256]; } __syncthreads(); }
+	if (blockSize >= 256) {if (tid < 128) { terms[tid] += terms[tid + 128]; } __syncthreads(); }
+	if (blockSize >= 128) {if (tid < 64) { terms[tid] += terms[tid + 64]; } __syncthreads(); }
+	if (tid < 32) { if (blockSize >= 64) terms[tid] += terms[tid + 32];
+		if (blockSize >= 32) terms[tid] += terms[tid + 16];
+		if (blockSize >= 16) terms[tid] += terms[tid + 8];
+		if (blockSize >= 8) terms[tid] += terms[tid + 4];
+		if (blockSize >= 4) terms[tid] += terms[tid + 2];
+		if (blockSize >= 2) terms[tid] += terms[tid + 1];
+	}
+
+	if (tid == 0)
+		hidden_err_gradients[j] = hidden[j] * (1 - hidden[j]) * terms[0];
+}
+
+/*
  * called with any number of blocks / threads
  * normally, 128 or other power of 2
  */
@@ -537,6 +574,7 @@ __constant__ __device__ float delta_max = 0.01;
  */
 __global__ void update_weights_v2(int n1, int n2, float *d_weights, float *deltas, bool reset) {
 	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
+
 
 	if (x < (n1+1)*n2) {
 		//int i = x % (n1+1); //layer 1 node, NOTE: same bug
@@ -1273,6 +1311,103 @@ void GPUNet::backprop_v2(float* d_set, int i, int t) {
 	}
 }
 
+inline int pow2roundup (int x) {
+    if (x < 0)
+        return 0;
+    --x;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    return x+1;
+}
+
+void GPUNet::backprop_v3(float* d_set, int i, int t) {
+	int n_threads = 128;
+
+	//maintain mse state
+	mse_sum_v2<<<1, 1, 0, err_calc_stream>>>(d_output, d_set, t, n_output);
+	output_correct_v2<<<1, 1, 0, err_calc_stream>>>(d_output, d_set, t, n_output);
+	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+	//float mse_sum = 0;
+	//CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(&mse_sum, d_mse_sum, sizeof(float), 0, cudaMemcpyDeviceToHost));
+	//std::cout << "Current mse_sum = " << mse_sum << std::endl;
+
+	output_error_gradients_v2<<<(n_output+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(d_output, d_set, t, d_out_err_gradients, n_output);
+	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+
+	update_hidden_output_deltas_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, l_rate, momentum, d_hidden, d_out_err_gradients, d_ho_deltas);
+	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+
+	//get first power of 2 larger than n_output
+	int bsize = pow2roundup(n_output);
+	std::cout << "bsize=" << bsize<< std::endl;
+	switch (bsize) {
+	case 1:
+		std::cout << "bprop case 1" << std::endl;
+		hidden_error_gradients_v2<<<(n_hidden+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+					d_hid_err_gradients, d_out_err_gradients);
+		break;
+	case 2:
+		std::cout << "bprop case 2" << std::endl;
+		hidden_error_gradients_v3<2><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+			d_hid_err_gradients, d_out_err_gradients);
+		break;
+	case 4:
+		std::cout << "bprop case 4" << std::endl;
+		hidden_error_gradients_v3<4><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+				d_hid_err_gradients, d_out_err_gradients);
+		break;
+	case 8:
+		std::cout << "bprop case 8" << std::endl;
+		hidden_error_gradients_v3<8><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+			d_hid_err_gradients, d_out_err_gradients);
+		break;
+	case 16:
+		std::cout << "bprop case 16" << std::endl;
+		hidden_error_gradients_v3<16><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+			d_hid_err_gradients, d_out_err_gradients);
+		break;
+	case 32:
+		std::cout << "bprop case 32" << std::endl;
+		hidden_error_gradients_v3<32><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+			d_hid_err_gradients, d_out_err_gradients);
+		break;
+	case 64:
+		std::cout << "bprop case 64" << std::endl;
+		hidden_error_gradients_v3<64><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+			d_hid_err_gradients, d_out_err_gradients);
+		break;
+	case 128:
+		std::cout << "bprop case 128" << std::endl;
+		hidden_error_gradients_v3<128><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+			d_hid_err_gradients, d_out_err_gradients);
+		break;
+	case 256:
+		std::cout << "bprop case 256" << std::endl;
+		hidden_error_gradients_v3<256><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+			d_hid_err_gradients, d_out_err_gradients);
+		break;
+	}
+
+	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+
+	if (!batching) { // don't update weights here
+		CUDA_CHECK_RETURN(cudaEventRecord(event1, bprop_stream));
+		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream1, event1, 0));
+		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream1>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas, false);
+	}
+
+	update_input_hidden_deltas_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_input, n_hidden, l_rate, momentum,
+			d_set, i, d_hid_err_gradients, d_ih_deltas);
+
+	if (!batching) { // don't update weights here
+		CUDA_CHECK_RETURN(cudaEventRecord(event2, bprop_stream));
+		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream2, event2, 0));
+		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
+	}
+}
 
 void GPUNet::rprop(float *d_inp, float *d_tar) {
 	int n_threads = 128;
@@ -1288,12 +1423,50 @@ void GPUNet::feed_forward_v1_2(float* d_set, int i) {
 	feed_forward_layer_v1_2<<<(n_output+threads-1)/threads, threads>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 }
 
+/*
+ * TODO: can I assume there are always at least 2 inputs,
+ * I think an input would 1 would still work with the algorithm but it's kind of useless
+ */
 void GPUNet::feed_forward_v2(float* d_set, int i) {
-	int threads = 128;
-	feed_forward_layer_v2_flat<128><<<n_hidden, threads, threads*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-	feed_forward_layer_v2<128><<<n_output, threads, threads*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	CUDA_CHECK_RETURN(cudaPeekAtLastError());
+	int bsize = pow2roundup(n_input+1);
+	switch (bsize) {
+	case 1:
+		feed_forward_layer_v2_flat<1><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<1><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 2:
+		feed_forward_layer_v2_flat<2><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<2><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 4:
+		feed_forward_layer_v2_flat<4><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<4><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 8:
+		feed_forward_layer_v2_flat<8><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<8><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 16:
+		feed_forward_layer_v2_flat<16><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<16><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 32:
+		feed_forward_layer_v2_flat<32><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<32><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 64:
+		feed_forward_layer_v2_flat<64><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<64><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 128:
+		feed_forward_layer_v2_flat<128><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<128><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 256:
+		feed_forward_layer_v2_flat<256><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<256><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	}
 }
 
 void GPUNet::feed_forward_v1_3(float *d_inp) {
@@ -1428,10 +1601,28 @@ void GPUNet::test_backprop(Net &net, NetData &d) {
 	TrainingDataSet *tset = d.get_training_dataset();
 	float *d_training_set;
 	GPUNet::copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
+//	//std::cout << std::endl << "GPU net 0" << std::endl;
+//	//print_net();
+//	//std::cout << std::endl;
+//
+//	int i = 0, t = n_input+1;
+//	feed_forward_v1_2(d_training_set, i);
+//	//std::cout << "GPU net 1" << std::endl;
+//	//print_net();
+//	//std::cout << std::endl;
+//
+//	//std::cout << "GPU net 2" << std::endl;
+//	backprop_v2(d_training_set, i, t);
+//	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+//	//print_net();
+//	std::cout << std::endl;
+//	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
+
+
+	std::cout << "Testing backprop_v3" << std::endl;
 	//std::cout << std::endl << "GPU net 0" << std::endl;
 	//print_net();
 	//std::cout << std::endl;
-
 	int i = 0, t = n_input+1;
 	feed_forward_v1_2(d_training_set, i);
 	//std::cout << "GPU net 1" << std::endl;
@@ -1439,7 +1630,7 @@ void GPUNet::test_backprop(Net &net, NetData &d) {
 	//std::cout << std::endl;
 
 	//std::cout << "GPU net 2" << std::endl;
-	backprop_v2(d_training_set, i, t);
+	backprop_v3(d_training_set, i, t);
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	//print_net();
 	std::cout << std::endl;

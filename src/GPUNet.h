@@ -82,6 +82,7 @@ public:
 	void feed_forward_v2_2(unsigned int n, float *d_inp, float *d_sums); //inputs already copied
 
 	void backprop_v2(float *d_set, int inp, int tar);
+	void backprop_v3(float* d_set, int i, int t);
 	void rprop(float *d_inp, float *d_tar);
 
 	float* evaluate(float* input);
