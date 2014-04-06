@@ -23,6 +23,7 @@
 }
 
 
+
 Profiler::Profiler(GPUNet *gnet, Net *net, NetTrainer *nt) {
 	Profiler::gnet = gnet;
 	Profiler::net = net;
@@ -96,6 +97,28 @@ float Profiler::profile_feed_forward_v1_2(NetData &d) {
 	return milliseconds;
 }
 
+float Profiler::profile_feed_forward_v2(NetData &d) {
+	std::cout << "Profiling feed forward v2 over " << iterations << " iterations." << std::endl;
+
+	TrainingDataSet *tset = d.get_training_dataset();
+	float *d_training_set;
+	gnet->copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
+
+	cuda_start();
+
+	for (int i = 0; i < iterations; ++i) {
+		gnet->feed_forward_v2(d_training_set, 0);
+	}
+
+	cuda_stop();
+
+	float milliseconds = 0;
+	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
+	CUDA_CHECK_RETURN(cudaFree(d_training_set));
+
+	std::cout << milliseconds << " ms" << std::endl;
+	return milliseconds;
+}
 
 float Profiler::profile_feed_forward_v1_3(NetData &d) {
 	std::cout << "Profiling feed forward v1.3 over " << iterations << " iterations." << std::endl;
@@ -175,6 +198,28 @@ float Profiler::profile_backprop_v2(NetData &d) {
 		gnet->backprop_v2(d_training_set, 0, gnet->n_input+1);
 	}
 
+
+	cuda_stop();
+	float milliseconds = 0;
+	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
+	CUDA_CHECK_RETURN(cudaFree(d_training_set));
+
+	std::cout << milliseconds << " ms" << std::endl;
+	return milliseconds;
+}
+
+float Profiler::profile_backprop_v3(NetData &d) {
+	std::cout << "Profiling backprop v3 over " << iterations << " iterations." << std::endl;
+
+	TrainingDataSet *tset = d.get_training_dataset();
+	float *d_training_set;
+	gnet->copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
+
+	cuda_start();
+
+	for (int i = 0; i < iterations; ++i) {
+		gnet->backprop_v3(d_training_set, 0, gnet->n_input+1);
+	}
 
 	cuda_stop();
 	float milliseconds = 0;

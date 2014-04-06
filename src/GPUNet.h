@@ -55,6 +55,19 @@ public:
 	bool write_net(std::string fname);
 	bool read_net(std::string fname);
 
+	inline int pow2roundup (int x) {
+	    --x;
+	    x |= x >> 1;
+	    x |= x >> 2;
+	    x |= x >> 4;
+	    x |= x >> 8;
+	    x |= x >> 16;
+	    return x+1;
+	}
+
+
+	void set_bsizes();
+
 	int get_num_input();
 	int get_num_hidden();
 	int get_num_output();
@@ -119,6 +132,8 @@ public:
 	int n_sections;
 	int save_freq;
 	std::string base_file_path;
+
+	int gpu_opt_bprop_bsize, gpu_opt_ff_bsize;
 
 	/*
 	 * GPU state

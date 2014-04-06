@@ -34,12 +34,12 @@ void profile(GPUNet &gnet, Net &net, NetData &d) {
 	Profiler p(&gnet, &net, &nt);
 	p.set_iterations(100);
 	p.profile_feed_forward_v1_2(d);
-	//p.profile_feed_forward_v1_3(d);
-	//p.profile_feed_forward_v2_2(d);
-	//p.profile_cpu_feedforward(d.get_training_dataset()->training_set[0]->input);
+	p.profile_feed_forward_v2(d);
+	p.profile_cpu_feedforward(&d.get_training_dataset()->training_set[0]);
 
 	p.profile_backprop_v2(d);
-	//p.profile_cpu_backprop(d.get_training_dataset()->training_set[0]->target);
+	p.profile_backprop_v3(d);
+	p.profile_cpu_backprop(&d.get_training_dataset()->training_set[d.get_training_dataset()->n_input+1]);
 }
 
 /**
@@ -120,12 +120,10 @@ int main(int argc, char **argv) {
 
 	bool train = true;
 	if (vm["test"].as<bool>()) {
-		std::cout << "testing" <<std::endl;
 		test(gnet, net, d);
 		train = false;
 	}
 	if (vm["profile"].as<bool>()) {
-		std::cout << "profiling" << std::endl;
 		profile(gnet, net, d);
 		train = false;
 	}

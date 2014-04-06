@@ -42,11 +42,11 @@ __device__ float get_random_range(float min, float max, int i, curandState *glob
  * Get the weight from i in layer1 to j layer2 given the array of weights between them.
  * n_layer is the number of nodes in the layer containing i.
  */
-__device__ float get_weight(float* weights, int n_layer, int i, int j) {
+__device__ __inline__ float get_weight(float* weights, int n_layer, int i, int j) {
 	return weights[(n_layer+1)*j + i];
 }
 
-__device__ void set_weight(float* weights, int n_layer, int i, int j, float v) {
+__device__ __inline__ void set_weight(float* weights, int n_layer, int i, int j, float v) {
 	weights[(n_layer+1)*j + i] = v;
 }
 
@@ -54,7 +54,7 @@ __device__ void set_weight(float* weights, int n_layer, int i, int j, float v) {
  * Compute the sigmoid value of a given float
  * \param x the value to compute the sigmoid of
  */
-__device__ inline float sigmoid(float x) {
+__device__ __inline__ float sigmoid(float x) {
 	return 1.0 / (1.0 + exp(-x));
 }
 
@@ -236,7 +236,8 @@ __global__ void feed_forward_layer_v1_2(int n_layer1, int n_layer2, float* layer
 	if (n < n_layer2) {
 		float r = 0;
 		for (int i = 0; i <= n_layer1; ++i) { //include bias
-			r += layer1[i] * weights[(n_layer1+1)*n + i]; //get_weight(weights, n_layer1, i, n);
+			//r += layer1[i] * weights[(n_layer1+1)*n + i];
+			r += layer1[i] * get_weight(weights, n_layer1, i, n);
 			//printf("l2: n=%d, r=%f, input[%d]=%f, weight[%d,%d]=%f, t = %f\n", n, r, i, layer1[i],i,n,weights[(n_layer1+1)*n+i], (layer1[i] * weights[(n_layer1+1)*n + i]) );
 		}
 		layer2[n] = sigmoid(r);
@@ -250,7 +251,8 @@ __global__ void feed_forward_layer_v1_2_flat(int n_layer1, int n_layer2, float* 
 		float *layer1 = &(d_set[ind]);
 		float r = 0;
 		for (int i = 0; i <= n_layer1; ++i) { //include bias
-			r += layer1[i] * weights[(n_layer1+1)*n + i]; //get_weight(weights, n_layer1, i, n);
+			//r += layer1[i] * weights[(n_layer1+1)*n + i];
+			r += layer1[i] * get_weight(weights, n_layer1, i, n);
 			//printf("l1: n=%d, r=%f, input[%d]=%f, weight[%d,%d]=%f, t = %f\n", n, r, i, layer1[i],i,n,weights[(n_layer1+1)*n+i], (layer1[i] * weights[(n_layer1+1)*n + i]) );
 		}
 		//printf("n = %d, sigmoid(%f)=%f\n",n, r,sigmoid(r));
@@ -275,12 +277,14 @@ __global__ void feed_forward_layer_v2(int n_layer1, int n_layer2, float* layer1,
 	terms[tid] = 0;
 
 	if (n < n_layer2 && tid <= n_layer1)
-		terms[tid] = layer1[tid] * weights[(n_layer1+1)*n + tid];
+		terms[tid] = layer1[tid] * get_weight(weights, n_layer1, tid, n);
+		//terms[tid] = layer1[tid] * weights[(n_layer1+1)*n + tid];
 
 	__syncthreads();
 //	if (terms[tid] != 0)
 //		printf("l2: terms[%d]=%f\n", tid, terms[tid]);
 
+	if (blockSize >= 1024) { if (tid < 512) { terms[tid] += terms[tid + 512]; } __syncthreads(); }
 	if (blockSize >= 512) { if (tid < 256) { terms[tid] += terms[tid + 256]; } __syncthreads(); }
 	if (blockSize >= 256) {if (tid < 128) { terms[tid] += terms[tid + 128]; } __syncthreads(); }
 	if (blockSize >= 128) {if (tid < 64) { terms[tid] += terms[tid + 64]; } __syncthreads(); }
@@ -310,13 +314,15 @@ __global__ void feed_forward_layer_v2_flat(int n_layer1, int n_layer2, float* d_
 
 	if (n < n_layer2 && tid <= n_layer1) {
 		float *layer1 = &(d_set[ind]);
-		terms[tid] = layer1[tid] * weights[(n_layer1+1)*n + tid];
+		terms[tid] = layer1[tid] * get_weight(weights, n_layer1, tid, n);
+		//terms[tid] = layer1[tid] * weights[(n_layer1+1)*n + tid];
 	}
 
 	__syncthreads();
 //	if (terms[tid] != 0)
 //		printf("l1: terms[%d]=%f\n", tid, terms[tid]);
 
+	if (blockSize >= 1024) { if (tid < 512) { terms[tid] += terms[tid + 512]; } __syncthreads(); }
 	if (blockSize >= 512) { if (tid < 256) { terms[tid] += terms[tid + 256]; } __syncthreads(); }
 	if (blockSize >= 256) {if (tid < 128) { terms[tid] += terms[tid + 128]; } __syncthreads(); }
 	if (blockSize >= 128) {if (tid < 64) { terms[tid] += terms[tid + 64]; } __syncthreads(); }
@@ -428,7 +434,9 @@ __global__ void reduce_kernel(float *g_idata, float *g_odata, unsigned int n, in
  *
  *
  * ------------ backprop kernels ---------
- *
+ * It is slightly faster if I manually inline the calc_output_gradient and calc_hidden_gradient functions.
+ * But VERY slightly. About 10 ms cumulatively over 1000 iterations. So insignificant I'm not
+ * going to mess with it.
  *
  */
 
@@ -437,7 +445,7 @@ __global__ void reduce_kernel(float *g_idata, float *g_odata, unsigned int n, in
  * \param output float
  * \param target float
  */
-__device__ float calc_output_gradient(float output, float target) {
+__device__ __inline__ float calc_output_gradient(float output, float target) {
 	return output * (1 - output) * (target - output);
 }
 
@@ -482,11 +490,12 @@ __global__ void update_hidden_output_deltas_v2(int nh, int no, float l_rate, flo
 /*
  * TODO: I am using n_layer1*j+i to address weights. But this is less efficient here since need to access all outputs
  */
-__device__ float calc_hidden_gradient(int j, int nh, int no, float* hidden, float* d_ho_weights, float* output_err_gradients) {
+__device__ __inline__ float calc_hidden_gradient(int j, int nh, int no, float* hidden, float* d_ho_weights, float* output_err_gradients) {
 	//get sum of hidden->output weights * output error gradients
 	float s = 0;
 	for (int k = 0; k < no; ++k)
-		s += d_ho_weights[(nh+1)*k + j] * output_err_gradients[k]; //get_weight(d_ho_weights, nh, j, k) * output_err_gradients[k];
+		s += get_weight(d_ho_weights, nh, j, k) * output_err_gradients[k];
+		//s += d_ho_weights[(nh+1)*k + j] * output_err_gradients[k];
 
 	//return error gradient
 	return hidden[j] * (1 - hidden[j]) * s;
@@ -521,7 +530,8 @@ __global__ void hidden_error_gradients_v3(int nh, int no, float* hidden, float* 
 	terms[tid] = 0;
 
 	if (j < nh && tid < no) { //no bias on output so not <=
-		terms[tid] = d_ho_weights[(nh+1)*tid + j] * output_err_gradients[tid];
+		terms[tid] = get_weight(d_ho_weights, nh, j, tid) * output_err_gradients[tid];
+		//terms[tid] = d_ho_weights[(nh+1)*tid + j] * output_err_gradients[tid];
 	}
 
 	__syncthreads();
@@ -710,13 +720,9 @@ GPUNet::GPUNet(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructur
 	GPUNet::init_vars();
 	GPUNet::init_structure(ni, no, net_type);
 	GPUNet::init_nio();
+	GPUNet::set_bsizes();
 }
 
-GPUNet::GPUNet(std::string net_file) {
-	std::cout << "Initializing from net file: " << net_file << "." << std::endl;
-	GPUNet::init_nio();
-	GPUNet::read_net(net_file);
-}
 
 GPUNet::~GPUNet() {
 	cudaFree(d_input);
@@ -753,12 +759,14 @@ void GPUNet::load_netfile(std::string net_file) {
 	std::cout << "Initializing from net file: " << net_file << "." << std::endl;
 	GPUNet::init_nio();
 	GPUNet::read_net(net_file);
+	GPUNet::set_bsizes();
 }
 
 
 void GPUNet::init(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type) {
 	GPUNet::init_structure(ni, no, net_type);
 	GPUNet::init_nio();
+	GPUNet::set_bsizes();
 }
 /*
  * -------------- public ---------------
@@ -786,6 +794,7 @@ void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNetSettings::Ne
 			exit(1);
 		}
 	}
+
 }
 
 void GPUNet::init_vars() {
@@ -813,6 +822,9 @@ void GPUNet::init_vars() {
 	n_input = 0;
 	n_hidden = 0;
 	n_output = 0;
+
+	gpu_opt_bprop_bsize = 0;
+	gpu_opt_ff_bsize = 0;
 
 	/*
 	 * device
@@ -842,6 +854,13 @@ void GPUNet::init_vars() {
 	gpu_mem = NULL;
 }
 
+void GPUNet::set_bsizes() {
+	//get first power of 2 larger than n_output
+	gpu_opt_bprop_bsize = pow2roundup(n_output);
+	std::cout << "bprop bsize=" << gpu_opt_bprop_bsize << std::endl;
+	gpu_opt_ff_bsize = pow2roundup(n_input+1);
+	std::cout << "ff bsize=" << gpu_opt_ff_bsize << std::endl;
+}
 
 void GPUNet::alloc_host_mem() {
 	h_output = new float[n_output];
@@ -1311,17 +1330,6 @@ void GPUNet::backprop_v2(float* d_set, int i, int t) {
 	}
 }
 
-inline int pow2roundup (int x) {
-    if (x < 0)
-        return 0;
-    --x;
-    x |= x >> 1;
-    x |= x >> 2;
-    x |= x >> 4;
-    x |= x >> 8;
-    x |= x >> 16;
-    return x+1;
-}
 
 void GPUNet::backprop_v3(float* d_set, int i, int t) {
 	int n_threads = 128;
@@ -1340,58 +1348,44 @@ void GPUNet::backprop_v3(float* d_set, int i, int t) {
 	update_hidden_output_deltas_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, l_rate, momentum, d_hidden, d_out_err_gradients, d_ho_deltas);
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-	//get first power of 2 larger than n_output
-	int bsize = pow2roundup(n_output);
-	std::cout << "bsize=" << bsize<< std::endl;
-	switch (bsize) {
+	switch (gpu_opt_bprop_bsize) {
 	case 1:
-		std::cout << "bprop case 1" << std::endl;
 		hidden_error_gradients_v2<<<(n_hidden+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 					d_hid_err_gradients, d_out_err_gradients);
 		break;
 	case 2:
-		std::cout << "bprop case 2" << std::endl;
-		hidden_error_gradients_v3<2><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+		hidden_error_gradients_v3<2><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
 		break;
 	case 4:
-		std::cout << "bprop case 4" << std::endl;
-		hidden_error_gradients_v3<4><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+		hidden_error_gradients_v3<4><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 				d_hid_err_gradients, d_out_err_gradients);
 		break;
 	case 8:
-		std::cout << "bprop case 8" << std::endl;
-		hidden_error_gradients_v3<8><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+		hidden_error_gradients_v3<8><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
 		break;
 	case 16:
-		std::cout << "bprop case 16" << std::endl;
-		hidden_error_gradients_v3<16><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+		hidden_error_gradients_v3<16><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
 		break;
 	case 32:
-		std::cout << "bprop case 32" << std::endl;
-		hidden_error_gradients_v3<32><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+		hidden_error_gradients_v3<32><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
 		break;
 	case 64:
-		std::cout << "bprop case 64" << std::endl;
-		hidden_error_gradients_v3<64><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+		hidden_error_gradients_v3<64><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
 		break;
 	case 128:
-		std::cout << "bprop case 128" << std::endl;
-		hidden_error_gradients_v3<128><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+		hidden_error_gradients_v3<128><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
 		break;
 	case 256:
-		std::cout << "bprop case 256" << std::endl;
-		hidden_error_gradients_v3<256><<<n_hidden, bsize, bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+		hidden_error_gradients_v3<256><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
 		break;
 	}
-
-	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
 	if (!batching) { // don't update weights here
 		CUDA_CHECK_RETURN(cudaEventRecord(event1, bprop_stream));
@@ -1428,43 +1422,50 @@ void GPUNet::feed_forward_v1_2(float* d_set, int i) {
  * I think an input would 1 would still work with the algorithm but it's kind of useless
  */
 void GPUNet::feed_forward_v2(float* d_set, int i) {
-	int bsize = pow2roundup(n_input+1);
-	switch (bsize) {
+	switch (gpu_opt_ff_bsize) {
 	case 1:
-		feed_forward_layer_v2_flat<1><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<1><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		feed_forward_layer_v2_flat<1><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<1><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 		break;
 	case 2:
-		feed_forward_layer_v2_flat<2><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<2><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		feed_forward_layer_v2_flat<2><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<2><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 		break;
 	case 4:
-		feed_forward_layer_v2_flat<4><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<4><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		feed_forward_layer_v2_flat<4><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<4><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 		break;
 	case 8:
-		feed_forward_layer_v2_flat<8><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<8><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		feed_forward_layer_v2_flat<8><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<8><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 		break;
 	case 16:
-		feed_forward_layer_v2_flat<16><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<16><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		feed_forward_layer_v2_flat<16><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<16><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 		break;
 	case 32:
-		feed_forward_layer_v2_flat<32><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<32><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		feed_forward_layer_v2_flat<32><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<32><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 		break;
 	case 64:
-		feed_forward_layer_v2_flat<64><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<64><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		feed_forward_layer_v2_flat<64><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<64><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 		break;
 	case 128:
-		feed_forward_layer_v2_flat<128><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<128><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		feed_forward_layer_v2_flat<128><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<128><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 		break;
 	case 256:
-		feed_forward_layer_v2_flat<256><<<n_hidden, bsize, bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<256><<<n_output, bsize, bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		feed_forward_layer_v2_flat<256><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<256><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 512:
+		feed_forward_layer_v2_flat<512><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<512><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 1024:
+		feed_forward_layer_v2_flat<1024><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<1024><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 		break;
 	}
 }
