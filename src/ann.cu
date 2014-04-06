@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
 		//init normally
 		net.init(d.num_inputs(), ceil(1.0/3.0*d.num_inputs()), d.num_targets());
 		gnet.init(d.num_inputs(), d.num_targets(), GPUNetSettings::STANDARD);
-
+		gnet.alloc_host_mem();
 		gnet.alloc_dev_mem();
 		gnet.init_from_net(net, d);
 	}
@@ -131,8 +131,9 @@ int main(int argc, char **argv) {
 	}
 	if (train) {
 		if (vm["cpu"].as<bool>()) {
+			std::cout << "--cpu set" << std::endl;
 			NetTrainer nt = NetTrainer(&net);
-			nt.set_stopping_conds(max_epochs, 100.0);
+			nt.set_stopping_conds(max_epochs, 97.5);
 			nt.set_training_params(l_rate, momentum);
 			start = clock();
 			nt.train_net(d.get_training_dataset());
@@ -150,8 +151,8 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	CUDA_CHECK_RETURN(cudaDeviceReset());
-	std::cout << "Device reset" << std::endl;
+//	CUDA_CHECK_RETURN(cudaDeviceReset());
+//	std::cout << "Device reset" << std::endl;
 
 	return 0;
 }

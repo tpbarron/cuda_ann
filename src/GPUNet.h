@@ -47,6 +47,7 @@ public:
 	void init_nio();
 	void init_structure(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type);
 	void init_vars();
+	void alloc_host_mem();
 	void alloc_dev_mem();
 	void init_from_net(Net &net, NetData &d);
 	void init_net();
@@ -75,6 +76,8 @@ public:
 	void copy_error_to_host(float* mse, float* acc);
 
 	void feed_forward_v1_2(float *d_set, int inp);
+	void feed_forward_v2(float* d_set, int i);
+
 	void feed_forward_v1_3(float *d_inp);
 	void feed_forward_v2_2(unsigned int n, float *d_inp, float *d_sums); //inputs already copied
 
@@ -114,7 +117,7 @@ public:
 	int n_copyable_patterns;
 	int n_sections;
 	int save_freq;
-	std::string base_file_name;
+	std::string base_file_path;
 
 	/*
 	 * GPU state

@@ -237,6 +237,7 @@ __global__ void feed_forward_layer_v1_2(int n_layer1, int n_layer2, float* layer
 		float r = 0;
 		for (int i = 0; i <= n_layer1; ++i) { //include bias
 			r += layer1[i] * weights[(n_layer1+1)*n + i]; //get_weight(weights, n_layer1, i, n);
+			//printf("l2: n=%d, r=%f, input[%d]=%f, weight[%d,%d]=%f, t = %f\n", n, r, i, layer1[i],i,n,weights[(n_layer1+1)*n+i], (layer1[i] * weights[(n_layer1+1)*n + i]) );
 		}
 		layer2[n] = sigmoid(r);
 	}
@@ -250,11 +251,88 @@ __global__ void feed_forward_layer_v1_2_flat(int n_layer1, int n_layer2, float* 
 		float r = 0;
 		for (int i = 0; i <= n_layer1; ++i) { //include bias
 			r += layer1[i] * weights[(n_layer1+1)*n + i]; //get_weight(weights, n_layer1, i, n);
-			//printf("n=%d, r=%f, input[%d]=%f, weight[%d,%d]=%f\n", n, r, i, layer1[i],i,n,weights[(n_layer1+1)*n+i]);
+			//printf("l1: n=%d, r=%f, input[%d]=%f, weight[%d,%d]=%f, t = %f\n", n, r, i, layer1[i],i,n,weights[(n_layer1+1)*n+i], (layer1[i] * weights[(n_layer1+1)*n + i]) );
 		}
 		//printf("n = %d, sigmoid(%f)=%f\n",n, r,sigmoid(r));
 		layer2[n] = sigmoid(r);
 	}
+}
+
+/*
+ * calc each term of linear combination in separate thread,
+ * store in shared memory. So reduction in same kernel.
+ * Works only if num inputs is less than reasonable blocksize, probably 128.
+ *
+ */
+
+template <unsigned int blockSize>
+__global__ void feed_forward_layer_v2(int n_layer1, int n_layer2, float* layer1, float* layer2, float* weights) {
+	extern __shared__ float terms[];
+
+	unsigned int n = blockIdx.x; // node to compute;
+	unsigned int tid = threadIdx.x;
+
+	terms[tid] = 0;
+
+	if (n < n_layer2 && tid <= n_layer1)
+		terms[tid] = layer1[tid] * weights[(n_layer1+1)*n + tid];
+
+	__syncthreads();
+//	if (terms[tid] != 0)
+//		printf("l2: terms[%d]=%f\n", tid, terms[tid]);
+
+	if (blockSize >= 512) { if (tid < 256) { terms[tid] += terms[tid + 256]; } __syncthreads(); }
+	if (blockSize >= 256) {if (tid < 128) { terms[tid] += terms[tid + 128]; } __syncthreads(); }
+	if (blockSize >= 128) {if (tid < 64) { terms[tid] += terms[tid + 64]; } __syncthreads(); }
+	if (tid < 32) { if (blockSize >= 64) terms[tid] += terms[tid + 32];
+		if (blockSize >= 32) terms[tid] += terms[tid + 16];
+		if (blockSize >= 16) terms[tid] += terms[tid + 8];
+		if (blockSize >= 8) terms[tid] += terms[tid + 4];
+		if (blockSize >= 4) terms[tid] += terms[tid + 2];
+		if (blockSize >= 2) terms[tid] += terms[tid + 1];
+	}
+	if (tid == 0)
+		layer2[n] = sigmoid(terms[0]);
+
+	//__syncthreads();
+	//printf("terms[%d]=%f\n", tid, terms[tid]);
+}
+
+
+template <unsigned int blockSize>
+__global__ void feed_forward_layer_v2_flat(int n_layer1, int n_layer2, float* d_set, int ind, float* layer2, float* weights) {
+	extern __shared__ float terms[];
+
+	unsigned int n = blockIdx.x; // node to compute;
+	unsigned int tid = threadIdx.x;
+
+	terms[tid] = 0;
+
+	if (n < n_layer2 && tid <= n_layer1) {
+		float *layer1 = &(d_set[ind]);
+		terms[tid] = layer1[tid] * weights[(n_layer1+1)*n + tid];
+	}
+
+	__syncthreads();
+//	if (terms[tid] != 0)
+//		printf("l1: terms[%d]=%f\n", tid, terms[tid]);
+
+	if (blockSize >= 512) { if (tid < 256) { terms[tid] += terms[tid + 256]; } __syncthreads(); }
+	if (blockSize >= 256) {if (tid < 128) { terms[tid] += terms[tid + 128]; } __syncthreads(); }
+	if (blockSize >= 128) {if (tid < 64) { terms[tid] += terms[tid + 64]; } __syncthreads(); }
+	if (tid < 32) { if (blockSize >= 64) terms[tid] += terms[tid + 32];
+		if (blockSize >= 32) terms[tid] += terms[tid + 16];
+		if (blockSize >= 16) terms[tid] += terms[tid + 8];
+		if (blockSize >= 8) terms[tid] += terms[tid + 4];
+		if (blockSize >= 4) terms[tid] += terms[tid + 2];
+		if (blockSize >= 2) terms[tid] += terms[tid + 1];
+	}
+	if (tid == 0)
+		layer2[n] = sigmoid(terms[0]);
+
+	//__syncthreads();
+
+	//printf("terms[%d]=%f\n", tid, terms[tid]);
 }
 
 /*
@@ -324,10 +402,9 @@ __global__ void clamp_outputs(float *output, int n) {
 template <unsigned int blockSize>
 __global__ void reduce_kernel(float *g_idata, float *g_odata, unsigned int n, int offset) {
 	g_idata = &(g_idata[n*offset]);
-
-	__syncthreads();
 	extern __shared__ float sdata[];
-	unsigned int tid = threadIdx.x;
+
+	__syncthreads();unsigned int tid = threadIdx.x;
 	unsigned int i = blockIdx.x*(blockSize*2) + tid;
 	unsigned int gridSize = blockSize*2*gridDim.x;
 	sdata[tid] = 0;
@@ -588,13 +665,12 @@ __global__ void print_input(int n_input, float *input) {
  */
 
 GPUNet::GPUNet() {
-
+	GPUNet::init_vars();
 }
 
 GPUNet::GPUNet(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type=GPUNetSettings::STANDARD) {
-	n_input = 0;
-	GPUNet::init_structure(ni, no, net_type);
 	GPUNet::init_vars();
+	GPUNet::init_structure(ni, no, net_type);
 	GPUNet::init_nio();
 }
 
@@ -641,13 +717,11 @@ void GPUNet::load_netfile(std::string net_file) {
 	GPUNet::read_net(net_file);
 }
 
+
 void GPUNet::init(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type) {
-	n_input = 0;
 	GPUNet::init_structure(ni, no, net_type);
-	GPUNet::init_vars();
 	GPUNet::init_nio();
 }
-
 /*
  * -------------- public ---------------
  */
@@ -683,7 +757,7 @@ void GPUNet::init_vars() {
 	desired_acc = GPUNetSettings::GPU_DESIRED_ACCURACY;
 	batching = GPUNetSettings::GPU_USE_BATCH;
 	save_freq = GPUNetSettings::GPU_SAVE_FREQUENCY;
-	base_file_name = GPUNetSettings::GPU_BASE_FILE_NAME;
+	base_file_path = GPUNetSettings::GPU_BASE_FILE_NAME;
 
 	CUDA_CHECK_RETURN(cudaGetDeviceCount(&n_gpus));
 
@@ -697,6 +771,10 @@ void GPUNet::init_vars() {
 
 	start = 0;
 	finish = 0;
+
+	n_input = 0;
+	n_hidden = 0;
+	n_output = 0;
 
 	/*
 	 * device
@@ -718,15 +796,22 @@ void GPUNet::init_vars() {
 	/*
 	 * host validation
 	 */
+	h_output = NULL;
+	h_ih_weights = NULL;
+	h_ho_weights = NULL;
+
+	//init gpu mem to 0 for each gpu
+	gpu_mem = NULL;
+}
+
+
+void GPUNet::alloc_host_mem() {
 	h_output = new float[n_output];
 	h_ih_weights = new float[(n_input+1)*n_hidden];
 	h_ho_weights = new float[(n_hidden+1)*n_output];
-
-	//init gpu mem to 0 for each gpu
 	gpu_mem = new size_t[n_gpus];
 	memset(gpu_mem, 0, n_gpus*sizeof(size_t));
 }
-
 
 /*
  * allocate memory on device for
@@ -858,7 +943,7 @@ void GPUNet::set_stopping_conds(int me, float acc) {
 }
 
 void GPUNet::set_base_file_name(std::string f) {
-	base_file_name = f;
+	base_file_path = f;
 }
 
 
@@ -1069,7 +1154,7 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 			++epoch;
 
 			if (epoch % save_freq == 0) {
-				std::string fname = "nets/" + base_file_name + "_" + boost::lexical_cast<std::string>(epoch) + ".net";
+				std::string fname = base_file_path + "_" + boost::lexical_cast<std::string>(epoch) + ".net";
 				std::cout << "Writing intermediary net " << fname << std::endl;
 				write_net(fname);
 			}
@@ -1203,6 +1288,14 @@ void GPUNet::feed_forward_v1_2(float* d_set, int i) {
 	feed_forward_layer_v1_2<<<(n_output+threads-1)/threads, threads>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 }
 
+void GPUNet::feed_forward_v2(float* d_set, int i) {
+	int threads = 128;
+	feed_forward_layer_v2_flat<128><<<n_hidden, threads, threads*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+	feed_forward_layer_v2<128><<<n_output, threads, threads*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+	CUDA_CHECK_RETURN(cudaPeekAtLastError());
+}
+
 void GPUNet::feed_forward_v1_3(float *d_inp) {
 	int threads = 128;
 	feed_forward_layer_v1_3<<<(n_hidden+threads-1)/threads, threads, threads*sizeof(float)>>>(n_input, n_hidden, d_inp, d_hidden, d_ih_weights);
@@ -1304,12 +1397,13 @@ void GPUNet::test_feed_forward(Net &net, NetData &d) {
 	//print_net();
 	//CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));
 
-	/*std::cout << "Testing method 2" << std::endl;
-	feed_forward_v2();
-	std::cout << "Validates: " << validates(net.outputNeurons) << "\n";
+	std::cout << "Testing method 2" << std::endl;
+	feed_forward_v2(d_training_set, 0);
+	std::cout << "Validates: " << validate_output(net.outputNeurons) << "\n";
 	CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));
 
-	std::cout << "Testing method 2.2" << std::endl;
+
+	/*std::cout << "Testing method 2.2" << std::endl;
 	feed_forward_v2_2();
 	std::cout << "Validates: " << validates(net.outputNeurons) << "\n";
 	CUDA_CHECK_RETURN(cudaMemset(d_output, 0, n_output*sizeof(float)));*/

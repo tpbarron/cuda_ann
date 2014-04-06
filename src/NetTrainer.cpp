@@ -25,24 +25,34 @@ NetTrainer::NetTrainer(Net *net) {
 	validationSetMSE = 0;
 	generalizationSetMSE = 0;
 
+	d_min = .000001;
+	d_max = 50;
+	rate_minus = .5;
+	rate_plus = 1.2;
 
-	//create delta arrays, include bias
+
+	//create delta arrays, include biasm 	//rprop deltas
 	NetTrainer::deltaInputHidden = new float*[net->n_input+1];
+	NetTrainer::rpropDeltaInputHidden = new float*[net->n_input+1];
 	for (int i = 0; i <= net->n_input; ++i) {
 		NetTrainer::deltaInputHidden[i] = new float[net->n_hidden];
+		NetTrainer::rpropDeltaInputHidden[i] = new float[net->n_hidden];
 		for (int j = 0; j < net->n_hidden; ++j) {
 			NetTrainer::deltaInputHidden[i][j] = 0;
+			NetTrainer::rpropDeltaInputHidden[i][j] = 0;
 		}
 	}
 
 	NetTrainer::deltaHiddenOutput = new float*[net->n_hidden+1];
+	NetTrainer::rpropDeltaHiddenOutput = new float*[net->n_hidden+1];
 	for (int i = 0; i <= net->n_hidden; ++i) {
 		NetTrainer::deltaHiddenOutput[i] = new float[net->n_output];
+		NetTrainer::rpropDeltaHiddenOutput[i] = new float[net->n_output];
 		for (int j = 0; j < net->n_output; ++j) {
 			NetTrainer::deltaHiddenOutput[i][j] = 0;
+			NetTrainer::rpropDeltaHiddenOutput[i][j] = 0;
 		}
 	}
-
 
 	//error gradients
 	NetTrainer::hiddenErrorGradients = new float[net->n_hidden+1];
@@ -55,13 +65,19 @@ NetTrainer::NetTrainer(Net *net) {
 
 NetTrainer::~NetTrainer() {
 	//delete deltas
-	for (int i = 0; i <= net->n_input; ++i)
+	for (int i = 0; i <= net->n_input; ++i) {
 		delete[] NetTrainer::deltaInputHidden[i];
+		delete[] NetTrainer::rpropDeltaInputHidden[i];
+	}
 	delete[] NetTrainer::deltaInputHidden;
+	delete[] NetTrainer::rpropDeltaInputHidden;
 
-	for (int i = 0; i <= net->n_hidden; ++i)
+	for (int i = 0; i <= net->n_hidden; ++i) {
 		delete[] NetTrainer::deltaHiddenOutput[i];
+		delete[] NetTrainer::rpropDeltaHiddenOutput[i];
+	}
 	delete[] NetTrainer::deltaHiddenOutput;
+	delete[] NetTrainer::rpropDeltaHiddenOutput;
 
 	//error gradients
 	delete[] NetTrainer::hiddenErrorGradients;
@@ -161,7 +177,8 @@ void NetTrainer::run_training_epoch(TrainingDataSet *tset) {
 		float* input = &(tset->training_set[tp*tset->fpp]);
 		float* target = &(tset->training_set[tp*tset->fpp+tset->n_input+1]);
 		net->feed_forward(input);
-		backprop(target);
+		//backprop(target);
+		rprop(target);
 
 		//pattern correct flag
 		bool patternCorrect = true;
@@ -272,10 +289,22 @@ void NetTrainer::rprop(float* targets) {
 		float prevOutputErrorGradient = outputErrorGradients[k];
 		outputErrorGradients[k] = NetTrainer::get_output_error_gradient(targets[k], net->outputNeurons[k]);
 
+		float v = prevOutputErrorGradient * outputErrorGradients[k];
+		int sign = (outputErrorGradients[k] > 0) - (outputErrorGradients[k] < 0);
 		//for all nodes in hidden layer and bias neuron
 		for (int j = 0; j <= net->n_hidden; ++j) {
-			//calculate change in weight
-			deltaHiddenOutput[j][k] = l_rate * net->hiddenNeurons[j] * outputErrorGradients[k] + momentum * deltaHiddenOutput[j][k];
+			if (v > 0.00001) {
+				rpropDeltaHiddenOutput[j][k] = std::min(rpropDeltaHiddenOutput[j][k]*rate_plus, d_max);
+				deltaHiddenOutput[j][k] = -1*sign*rpropDeltaHiddenOutput[j][k];
+				net->set_ho_weight(j, k, net->get_ho_weight(j, k)+deltaHiddenOutput[j][k]);
+			} else if (v < -0.00001) {
+				rpropDeltaHiddenOutput[j][k] = std::max(rpropDeltaHiddenOutput[j][k]*rate_minus, d_min);
+				net->set_ho_weight(j, k, net->get_ho_weight(j, k)-deltaHiddenOutput[j][k]);
+				outputErrorGradients[k] = 0;
+			} else {
+				deltaHiddenOutput[j][k] = -1*sign*rpropDeltaHiddenOutput[j][k];
+				net->set_ho_weight(j, k, net->get_ho_weight(j, k)+deltaHiddenOutput[j][k]);
+			}
 		}
 	}
 
@@ -298,11 +327,26 @@ void NetTrainer::rprop(float* targets) {
 	//modify deltas between input and hidden layers
 	for (int j = 0; j < net->n_hidden; ++j) {
 		//get error gradient for every hidden node
-		hiddenErrorGradients[j] = get_hidden_error_gradient(j);
 		//for all nodes in input layer and bias neuron
+		float prevHiddenErrorGradient = hiddenErrorGradients[j];
+		hiddenErrorGradients[j] = get_hidden_error_gradient(j);
+		float v = prevHiddenErrorGradient * hiddenErrorGradients[j];
+		int sign = (hiddenErrorGradients[j] > 0) - (hiddenErrorGradients[j] < 0);
+
 		for (int i = 0; i <= net->n_input; ++i) {
 			//calculate change in weight
-			deltaInputHidden[i][j] = l_rate * net->inputNeurons[i] * hiddenErrorGradients[j] + momentum * deltaInputHidden[i][j];
+			if (v > 0) {
+				rpropDeltaInputHidden[i][j] = std::min(rpropDeltaInputHidden[i][j]*rate_plus, d_max);
+				deltaInputHidden[i][j] = -sign*rpropDeltaInputHidden[i][j];
+				net->set_ih_weight(i, j, net->get_ih_weight(i, j)+deltaInputHidden[i][j]);
+			} else if (v < 0) {
+				rpropDeltaInputHidden[i][j] = std::max(rpropDeltaInputHidden[i][j]*rate_minus, d_min);
+				net->set_ih_weight(i, j, net->get_ih_weight(i, j)-deltaInputHidden[i][j]);
+				hiddenErrorGradients[j] = 0;
+			} else {
+				deltaInputHidden[i][j] = -sign*rpropDeltaInputHidden[i][j];
+				net->set_ih_weight(i, j, net->get_ih_weight(i, j)+deltaInputHidden[i][j]);
+			}
 		}
 	}
 
@@ -323,7 +367,7 @@ void NetTrainer::rprop(float* targets) {
 
 
 	//stochastic learning update the weights immediately
-	update_weights();
+	//update_weights();
 }
 
 void NetTrainer::update_weights() {

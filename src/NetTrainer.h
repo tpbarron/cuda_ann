@@ -59,15 +59,22 @@ private:
 
 	float** deltaInputHidden;
 	float** deltaHiddenOutput;
+	float** rpropDeltaInputHidden;
+	float** rpropDeltaHiddenOutput;
 
 	float* hiddenErrorGradients;
 	float* outputErrorGradients;
+
+	float d_max, d_min, rate_plus, rate_minus;
 
 	inline float get_output_error_gradient(float target, float output) {
 		return output * (1 - output) * (target - output);
 	}
 	float get_hidden_error_gradient(int j);
 	void run_training_epoch(TrainingDataSet *tset);
+
+	float min(float a, float b);
+	float max(float a, float b);
 
 };
 
