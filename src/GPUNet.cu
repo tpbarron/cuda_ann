@@ -955,7 +955,7 @@ void GPUNet::init_from_net(Net &net, NetData &d) {
 	init_deltas_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(n_input+1, n_hidden, d_ih_deltas);
 	init_deltas_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>(n_hidden+1, n_output, d_ho_deltas);
 
-	std::cout << "Data copied to device" << std::endl << std::endl;
+	std::cout << "Data copied to device" << std::endl;
 }
 
 

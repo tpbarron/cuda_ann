@@ -29,7 +29,7 @@ public:
 	void set_learning_rate(float lr);
 	void set_momentum(float m);
 
-	void set_training_params(float lr, float m);
+	void set_training_params(float lr, float m, bool b);
 	void set_max_epochs(int max_epochs);
 	void set_desired_accuracy(float acc);
 	void set_stopping_conds(int me, float acc);

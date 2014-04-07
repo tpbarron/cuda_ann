@@ -128,11 +128,17 @@ int main(int argc, char **argv) {
 		train = false;
 	}
 	if (train) {
+		bool batching = vm["batch"].as<bool>();
+		if (batching)
+			std::cout << "Using batch learning mode" << std::endl;
+		else
+			std::cout << "Using stochastic learning mode" << std::endl;
+
 		if (vm["cpu"].as<bool>()) {
 			std::cout << "CPU flag set" << std::endl;
 			NetTrainer nt = NetTrainer(&net);
 			nt.set_stopping_conds(max_epochs, 97.5);
-			nt.set_training_params(l_rate, momentum);
+			nt.set_training_params(l_rate, momentum, batching);
 			start = clock();
 			nt.train_net(d.get_training_dataset());
 			stop = clock();
@@ -140,7 +146,7 @@ int main(int argc, char **argv) {
 		} else {
 			gnet.set_base_file_name(fbase);
 			gnet.set_save_frequency(save_freq);
-			gnet.set_training_params(l_rate, momentum, vm["batch"].as<bool>());
+			gnet.set_training_params(l_rate, momentum, batching);
 			gnet.set_stopping_conds(max_epochs, 100.0);
 			start = clock();
 			gnet.train_net_sectioned(d.get_training_dataset());

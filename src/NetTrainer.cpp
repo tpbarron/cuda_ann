@@ -102,9 +102,10 @@ void NetTrainer::set_momentum(float m) {
 	momentum = m;
 }
 
-void NetTrainer::set_training_params(float lr, float m) {
+void NetTrainer::set_training_params(float lr, float m, bool b) {
 	l_rate = lr;
 	momentum = m;
+	batching = b;
 }
 
 void NetTrainer::set_max_epochs(int me) {
