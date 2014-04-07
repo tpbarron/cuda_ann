@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
 		("profile,p", boost_po::bool_switch(), "profile GPU functions")
 		("validate,v", boost_po::bool_switch(), "validate GPU functions")
 		("test,t", boost_po::bool_switch(), "run test set, this will take a different random sampling to be the test set on every initialization")
-		("fbase,f", boost_po::value<std::string>(&fbase)->default_value("itr"), "base name of net file when writing, default = [itr]_#.txt")
+		("f_base,f", boost_po::value<std::string>(&fbase)->default_value("itr"), "base name of net file when writing, default = [itr]_#.txt")
 		("l_rate,r", boost_po::value<float>(&l_rate)->default_value(0.7), "learning rate, default = 0.7")
 		("t_pct,c", boost_po::value<float>(&t_set_pct)->default_value(0.8), "percentage of dataset used for training, default = 0.8")
 		("momentum,m", boost_po::value<float>(&momentum)->default_value(0.9), "momentum, default = 0.9")
