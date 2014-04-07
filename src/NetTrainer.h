@@ -17,6 +17,7 @@ const float CPU_MOMENTUM = 0.9;
 const long CPU_MAX_EPOCHS = 1500;
 const int CPU_DESIRED_ACCURACY = 90;
 const int CPU_DESIRED_MSE = 0.001;
+const bool CPU_USE_BATCH = false;
 
 
 class NetTrainer {
@@ -44,6 +45,11 @@ private:
 
 	long epoch;
 	long max_epochs;
+
+	bool batching;
+	float delta_min, delta_max;
+
+	clock_t start, stop;
 
 	float l_rate;
 	float momentum;

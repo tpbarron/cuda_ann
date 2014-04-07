@@ -16,6 +16,7 @@ NetTrainer::NetTrainer(Net *net) {
 	NetTrainer::l_rate = CPU_LEARNING_RATE;
 	NetTrainer::momentum = CPU_MOMENTUM;
 	NetTrainer::desired_acc = CPU_DESIRED_ACCURACY;
+	NetTrainer::batching = CPU_USE_BATCH;
 
 	epoch = 0;
 	trainingSetAccuracy = 0;
@@ -30,6 +31,11 @@ NetTrainer::NetTrainer(Net *net) {
 	rate_minus = .5;
 	rate_plus = 1.2;
 
+	delta_min = -.1;
+	delta_max = .1;
+
+	start = 0;
+	stop = 0;
 
 	//create delta arrays, include biasm 	//rprop deltas
 	NetTrainer::deltaInputHidden = new float*[net->n_input+1];
@@ -134,15 +140,18 @@ void NetTrainer::train_net(TrainingDataSet *tset) {
 		run_training_epoch(tset);
 
 		//get generalization set accuracy and MSE
-		generalizationSetAccuracy = net->get_set_accuracy(tset->generalization_set, tset->n_generalization, tset->fpp);
-		generalizationSetMSE = net->get_set_mse(tset->generalization_set, tset->n_generalization, tset->fpp);
+//		generalizationSetAccuracy = net->get_set_accuracy(tset->generalization_set, tset->n_generalization, tset->fpp);
+//		generalizationSetMSE = net->get_set_mse(tset->generalization_set, tset->n_generalization, tset->fpp);
 
 		//print out change in training /generalization accuracy (only if a change is greater than a percent)
 		if (ceil(previousTAccuracy) != ceil(trainingSetAccuracy) || ceil(previousGAccuracy) != ceil(generalizationSetAccuracy)) {
 			std::cout << "Epoch: " << epoch;
-			std::cout << "; Test Set Acc:" << trainingSetAccuracy << "%, MSE: " << trainingSetMSE;
-			std::cout << ";\tGSet Acc:" << generalizationSetAccuracy << "%, MSE: " << generalizationSetMSE << std::endl;
+			std::cout << "; test set acc:" << trainingSetAccuracy << "%, MSE: " << trainingSetMSE;
+			std::cout << ";\tgset acc:" << generalizationSetAccuracy << "%, MSE: " << generalizationSetMSE << std::endl;
 		}
+
+		if (batching)
+			update_weights();
 
 		//once training set is complete increment epoch
 		epoch++;
@@ -154,9 +163,9 @@ void NetTrainer::train_net(TrainingDataSet *tset) {
 	validationSetMSE = net->get_set_mse(tset->validation_set, tset->n_validation, tset->fpp);
 
 	//out validation accuracy and MSE
-	std::cout << std::endl << "Training Complete!!! - > Elapsed Epochs: " << epoch << std::endl;
-	std::cout << "\tValidation Set Accuracy: " << validationSetAccuracy << std::endl;
-	std::cout << "\tValidation Set MSE: " << validationSetMSE << std::endl << std::endl;
+	std::cout << std::endl << "Training complete. Elapsed epochs: " << epoch << std::endl;
+	std::cout << "\tValidation set accuracy: " << validationSetAccuracy << std::endl;
+	std::cout << "\tValidation set MSE: " << validationSetMSE << std::endl << std::endl;
 }
 
 
@@ -166,6 +175,7 @@ void NetTrainer::train_net(TrainingDataSet *tset) {
 
 
 void NetTrainer::run_training_epoch(TrainingDataSet *tset) {
+	start = clock();
 	//incorrect patterns
 	int incorrectPatterns = 0;
 	float mse = 0;
@@ -177,8 +187,8 @@ void NetTrainer::run_training_epoch(TrainingDataSet *tset) {
 		float* input = &(tset->training_set[tp*tset->fpp]);
 		float* target = &(tset->training_set[tp*tset->fpp+tset->n_input+1]);
 		net->feed_forward(input);
-		//backprop(target);
-		rprop(target);
+		backprop(target);
+		//rprop(target);
 
 		//pattern correct flag
 		bool patternCorrect = true;
@@ -203,6 +213,8 @@ void NetTrainer::run_training_epoch(TrainingDataSet *tset) {
 	//update training accuracy and MSE
 	trainingSetAccuracy = 100 - ((float)incorrectPatterns/tset->n_training * 100);
 	trainingSetMSE = mse / (net->n_output * tset->n_training);
+	stop = clock();
+	std::cout << "Epoch time: " << ((float)stop-start)/CLOCKS_PER_SEC << std::endl;
 }
 
 //float NetTrainer::get_output_error_gradient(float target, float output) {
@@ -277,7 +289,8 @@ void NetTrainer::backprop(float* targets) {
 
 
 	//stochastic learning update the weights immediately
-	update_weights();
+	if (!batching)
+		update_weights();
 }
 
 
@@ -290,6 +303,7 @@ void NetTrainer::rprop(float* targets) {
 		outputErrorGradients[k] = NetTrainer::get_output_error_gradient(targets[k], net->outputNeurons[k]);
 
 		float v = prevOutputErrorGradient * outputErrorGradients[k];
+		std::cout << "v = " << v << std::endl;
 		int sign = (outputErrorGradients[k] > 0) - (outputErrorGradients[k] < 0);
 		//for all nodes in hidden layer and bias neuron
 		for (int j = 0; j <= net->n_hidden; ++j) {
@@ -337,14 +351,14 @@ void NetTrainer::rprop(float* targets) {
 			//calculate change in weight
 			if (v > 0) {
 				rpropDeltaInputHidden[i][j] = std::min(rpropDeltaInputHidden[i][j]*rate_plus, d_max);
-				deltaInputHidden[i][j] = -sign*rpropDeltaInputHidden[i][j];
+				deltaInputHidden[i][j] = -1*sign*rpropDeltaInputHidden[i][j];
 				net->set_ih_weight(i, j, net->get_ih_weight(i, j)+deltaInputHidden[i][j]);
 			} else if (v < 0) {
 				rpropDeltaInputHidden[i][j] = std::max(rpropDeltaInputHidden[i][j]*rate_minus, d_min);
 				net->set_ih_weight(i, j, net->get_ih_weight(i, j)-deltaInputHidden[i][j]);
 				hiddenErrorGradients[j] = 0;
 			} else {
-				deltaInputHidden[i][j] = -sign*rpropDeltaInputHidden[i][j];
+				deltaInputHidden[i][j] = -1*sign*rpropDeltaInputHidden[i][j];
 				net->set_ih_weight(i, j, net->get_ih_weight(i, j)+deltaInputHidden[i][j]);
 			}
 		}
@@ -375,14 +389,38 @@ void NetTrainer::update_weights() {
 	for (int i = 0; i <= net->n_input; i++) {
 		for (int j = 0; j < net->n_hidden; j++) {
 			//std::cout << "h_weight(" << i << ", " << j << ") = " << net->get_ih_weight(i,j) << ", h_deltas(" << i << ", " << j << ") = " << deltaInputHidden[i][j] << std::endl;
-			net->set_ih_weight(i, j, net->get_ih_weight(i, j) + deltaInputHidden[i][j]);
+			float d = deltaInputHidden[i][j];
+			if (batching) {
+				if (d > delta_max) {
+					net->set_ih_weight(i, j, net->get_ih_weight(i, j) + delta_max);
+				} else if (d < delta_min) {
+					net->set_ih_weight(i, j, net->get_ih_weight(i, j) + delta_min);
+				} else {
+					net->set_ih_weight(i, j, net->get_ih_weight(i, j) + d);
+				}
+				deltaInputHidden[i][j] = 0;
+			} else {
+				net->set_ih_weight(i, j, net->get_ih_weight(i, j) + d);
+			}
 		}
 	}
 
 	//hidden -> output weights
 	for (int j = 0; j <= net->n_hidden; j++) {
 		for (int k = 0; k < net->n_output; k++) {
-			net->set_ho_weight(j, k, net->get_ho_weight(j, k) + deltaHiddenOutput[j][k]);
+			float d = deltaHiddenOutput[j][k];
+			if (batching) {
+				if (d > delta_max) {
+					net->set_ho_weight(j, k, net->get_ho_weight(j, k) + delta_max);
+				} else if (d < delta_min) {
+					net->set_ho_weight(j, k, net->get_ho_weight(j, k) + delta_min);
+				} else {
+					net->set_ho_weight(j, k, net->get_ho_weight(j, k) + d);
+				}
+				deltaHiddenOutput[j][k] = 0;
+			} else {
+				net->set_ho_weight(j, k, net->get_ho_weight(j, k) + deltaHiddenOutput[j][k]);
+			}
 		}
 	}
 }

@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
 		gnet.load_netfile(netf);
 	} else {
 		//init normally
-		net.init(d.num_inputs(), ceil(1.0/3.0*d.num_inputs()), d.num_targets());
+		net.init(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
 		gnet.init(d.num_inputs(), d.num_targets(), GPUNetSettings::STANDARD);
 		gnet.alloc_host_mem();
 		gnet.alloc_dev_mem();
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
 	}
 	if (train) {
 		if (vm["cpu"].as<bool>()) {
-			std::cout << "--cpu set" << std::endl;
+			std::cout << "CPU flag set" << std::endl;
 			NetTrainer nt = NetTrainer(&net);
 			nt.set_stopping_conds(max_epochs, 97.5);
 			nt.set_training_params(l_rate, momentum);

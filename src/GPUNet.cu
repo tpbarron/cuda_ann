@@ -241,7 +241,8 @@ __global__ void feed_forward_layer_v1_2(int n_layer1, int n_layer2, float* layer
 		for (int i = 0; i <= n_layer1; ++i) { //include bias
 			//r += layer1[i] * weights[(n_layer1+1)*n + i];
 			//r += layer1[i] * get_weight(weights, n_layer1, i, n);
-			r += layer1[i] * get_weight(weights, n_layer2, i, n);
+			//r += layer1[i] * get_weight(weights, n_layer2, i, n);
+			r += layer1[i] * weights[(n_layer2)*i + n];
 			//printf("l2: n=%d, r=%f, input[%d]=%f, weight[%d,%d]=%f, t = %f\n", n, r, i, layer1[i],i,n,weights[(n_layer1+1)*n+i], (layer1[i] * weights[(n_layer1+1)*n + i]) );
 		}
 		layer2[n] = sigmoid(r);
@@ -257,7 +258,8 @@ __global__ void feed_forward_layer_v1_2_flat(int n_layer1, int n_layer2, float* 
 		for (int i = 0; i <= n_layer1; ++i) { //include bias
 			//r += layer1[i] * weights[(n_layer1+1)*n + i];
 			//r += layer1[i] * get_weight(weights, n_layer1, i, n);
-			r += layer1[i] * get_weight(weights, n_layer2, i, n);
+			//r += layer1[i] * get_weight(weights, n_layer2, i, n);
+			r += layer1[i] * weights[(n_layer2)*i + n];
 			//printf("l1: n=%d, r=%f, input[%d]=%f, weight[%d,%d]=%f, t = %f\n", n, r, i, layer1[i],i,n,weights[(n_layer1+1)*n+i], (layer1[i] * weights[(n_layer1+1)*n + i]) );
 		}
 		//printf("n = %d, sigmoid(%f)=%f\n",n, r,sigmoid(r));
@@ -799,7 +801,7 @@ void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNetSettings::Ne
 		n_output = no;
 		GPUNet::net_type = net_type;
 		if (net_type == GPUNetSettings::STANDARD) {
-			n_hidden = ceil(1.0/3.0*ni);
+			n_hidden = ceil(2.0/3.0*ni);
 		} else if (net_type == GPUNetSettings::GPU_ARCH_OPT) {
 			//get first multiple of 128 greater than 2.0/3.0*ni
 			n_hidden = (2.0/3.0*ni+127) / 128 * 128;
@@ -808,7 +810,6 @@ void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNetSettings::Ne
 			exit(1);
 		}
 	}
-
 }
 
 void GPUNet::init_vars() {
@@ -869,9 +870,10 @@ void GPUNet::init_vars() {
 }
 
 void GPUNet::set_bsizes() {
+	std::cout << "Finding ideal block sizes: ";
 	//get first power of 2 larger than n_output
 	gpu_opt_bprop_bsize = pow2roundup(n_output);
-	std::cout << "bprop bsize=" << gpu_opt_bprop_bsize << std::endl;
+	std::cout << "bprop bsize=" << gpu_opt_bprop_bsize << ", ";
 	gpu_opt_ff_bsize = pow2roundup(n_input+1);
 	std::cout << "ff bsize=" << gpu_opt_ff_bsize << std::endl;
 }
@@ -935,9 +937,9 @@ void GPUNet::init_from_net(Net &net, NetData &d) {
 	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 
 	//copy first pattern to input neurons so it is copied to device, instead of zeros
-	for (int i = 0; i < net.n_input; ++i) {
+	//for (int i = 0; i < net.n_input; ++i) {
 		//net.inputNeurons[i] = d.get_training_dataset()->training_set[0]->input[i];
-	}
+	//}
 
 	// so hidden and output initialized to 0
 	//CUDA_CHECK_RETURN(cudaMemcpy(d_input, net.inputNeurons, (net.n_input)*sizeof(float), cudaMemcpyHostToDevice));
@@ -1432,8 +1434,7 @@ void GPUNet::feed_forward_v1_2(float* d_set, int i) {
 }
 
 /*
- * TODO: can I assume there are always at least 2 inputs,
- * I think an input would 1 would still work with the algorithm but it's kind of useless
+ * TODO: what if the first layer cannot be done using the reduction but the second layer can
  */
 void GPUNet::feed_forward_v2(float* d_set, int i) {
 	switch (gpu_opt_ff_bsize) {
