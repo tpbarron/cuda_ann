@@ -20,7 +20,7 @@ public:
 	Net();
 	~Net();
 
-	void init(int ni, int nh, int no);
+	void init(int ni, int no, float hidden_pct);
 
 	//num neurons
 	int n_input, n_hidden, n_output;

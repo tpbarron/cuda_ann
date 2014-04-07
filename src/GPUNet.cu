@@ -736,9 +736,9 @@ GPUNet::GPUNet() {
 	GPUNet::init_vars();
 }
 
-GPUNet::GPUNet(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type=GPUNetSettings::STANDARD) {
+GPUNet::GPUNet(unsigned int ni, unsigned int no, float hidden_pct, GPUNetSettings::NetworkStructure net_type=GPUNetSettings::STANDARD) {
 	GPUNet::init_vars();
-	GPUNet::init_structure(ni, no, net_type);
+	GPUNet::init_structure(ni, no, hidden_pct, net_type);
 	GPUNet::init_nio();
 	GPUNet::set_bsizes();
 }
@@ -783,8 +783,8 @@ void GPUNet::load_netfile(std::string net_file) {
 }
 
 
-void GPUNet::init(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type) {
-	GPUNet::init_structure(ni, no, net_type);
+void GPUNet::init(unsigned int ni, unsigned int no, float hidden_pct, GPUNetSettings::NetworkStructure net_type) {
+	GPUNet::init_structure(ni, no, hidden_pct, net_type);
 	GPUNet::init_nio();
 	GPUNet::set_bsizes();
 }
@@ -797,7 +797,7 @@ void GPUNet::init_nio() {
 	nio->set_gnet(this);
 }
 
-void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type) {
+void GPUNet::init_structure(unsigned int ni, unsigned int no, float hidden_pct, GPUNetSettings::NetworkStructure net_type) {
 	if (n_input != 0) { // constructor initializing nodes has been called, error out
 		std::cerr << "Network has already been initialized" << std::endl;
 	} else if (ni != 0) { // if not empty constructor
@@ -805,10 +805,10 @@ void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNetSettings::Ne
 		n_output = no;
 		GPUNet::net_type = net_type;
 		if (net_type == GPUNetSettings::STANDARD) {
-			n_hidden = ceil(1.0/10.0*ni);
+			n_hidden = ceil(hidden_pct*ni);
 		} else if (net_type == GPUNetSettings::GPU_ARCH_OPT) {
 			//get first multiple of 128 greater than 2.0/3.0*ni
-			n_hidden = (2.0/3.0*ni+127) / 128 * 128;
+			n_hidden = (hidden_pct*ni+127) / 128 * 128;
 		} else {
 			std::cerr << "Invalid network type: " << net_type << std::endl;
 			exit(1);

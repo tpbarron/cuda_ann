@@ -25,7 +25,9 @@ Net::Net() {
 	Net::wHiddenOutput = NULL;
 }
 
-void Net::init(int ni, int nh, int no) {
+void Net::init(int ni, int no, float hidden_pct) {
+
+	int nh = ceil(ni*hidden_pct);
 
 	Net::n_input = ni;
 	Net::n_hidden = nh;

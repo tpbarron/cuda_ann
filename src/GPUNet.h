@@ -41,15 +41,15 @@ class GPUNet {
 public:
 
 	GPUNet();
-	GPUNet(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type);
+	GPUNet(unsigned int ni, unsigned int no, float hidden_pct, GPUNetSettings::NetworkStructure net_type);
 	GPUNet(std::string net_file);
 	~GPUNet();
 
 	void load_netfile(std::string net_file);
-	void init(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type);
+	void init(unsigned int ni, unsigned int no, float hidden_pct, GPUNetSettings::NetworkStructure net_type);
 
 	void init_nio();
-	void init_structure(unsigned int ni, unsigned int no, GPUNetSettings::NetworkStructure net_type);
+	void init_structure(unsigned int ni, unsigned int no, float hidden_pct, GPUNetSettings::NetworkStructure net_type);
 	void init_vars();
 	void alloc_host_mem();
 	void alloc_dev_mem();

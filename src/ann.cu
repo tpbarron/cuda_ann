@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 	srand(time(NULL));
 	time_t start, stop;
 
-	float l_rate, momentum, t_set_pct;
+	float l_rate, momentum, t_set_pct, hidden_pct;
 	int max_epochs, save_freq;
 	std::string dset, netf, fbase;
 
@@ -73,11 +73,12 @@ int main(int argc, char **argv) {
 		("test,t", boost_po::bool_switch(), "run test set, this will take a different random sampling to be the test set on every initialization")
 		("f_base,f", boost_po::value<std::string>(&fbase)->default_value("itr"), "base name of net file when writing, default = [itr]_#.txt")
 		("l_rate,r", boost_po::value<float>(&l_rate)->default_value(0.7), "learning rate, default = 0.7")
+		("hidden_pct,h", boost_po::value<float>(&hidden_pct)->default_value(2.0/3.0), "number of hidden nodes as percentage input nodes, default = 2.0/3.0")
 		("t_pct,c", boost_po::value<float>(&t_set_pct)->default_value(0.8), "percentage of dataset used for training, default = 0.8")
 		("momentum,m", boost_po::value<float>(&momentum)->default_value(0.9), "momentum, default = 0.9")
 		("batch,b", boost_po::bool_switch()->default_value(false), "batch update, default = 0 (false), will ignore momentum")
 		("max_epochs,e", boost_po::value<int>(&max_epochs)->default_value(1000), "max epochs, default = 1000")
-		("save_freq,s", boost_po::value<int>(&save_freq)->default_value(5), "save data every n epochs, default = 5")
+		("save_freq,s", boost_po::value<int>(&save_freq)->default_value(100), "save data every n epochs, default = 100")
 		("cpu", boost_po::bool_switch(), "run on CPU instead of GPU")
 		("reset", boost_po::bool_switch(), "reset all CUDA capable GPUs")
 	;
@@ -126,8 +127,9 @@ int main(int argc, char **argv) {
 		gnet.load_netfile(netf);
 	} else {
 		//init normally
-		net.init(d.num_inputs(), ceil(1.0/10.0*d.num_inputs()), d.num_targets());
-		gnet.init(d.num_inputs(), d.num_targets(), GPUNetSettings::STANDARD);
+		std::cout << "Using " << hidden_pct << " * " << "n_input for hidden nodes" << std::endl;
+		net.init(d.num_inputs(), d.num_targets(), hidden_pct);
+		gnet.init(d.num_inputs(), d.num_targets(), hidden_pct, GPUNetSettings::STANDARD);
 		gnet.alloc_host_mem();
 		gnet.alloc_dev_mem();
 		gnet.init_from_net(net, d);
