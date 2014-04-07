@@ -112,7 +112,7 @@
 					</folderInfo>
 					<sourceEntries>
 						<entry excluding="tests|tests/AllTests.cpp|catch|contrib" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
-						<entry excluding="GPUNetTests.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="tests"/>
+						<entry excluding="reduction_tests.cpp|GPUNetTests.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="tests"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

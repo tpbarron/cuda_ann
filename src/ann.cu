@@ -75,6 +75,7 @@ int main(int argc, char **argv) {
 		("max_epochs,e", po::value<int>(&max_epochs)->default_value(1000), "max epochs, default = 1000")
 		("save_freq,s", po::value<int>(&save_freq)->default_value(5), "save data every n epochs, default = 5")
 		("cpu", po::bool_switch(), "run on CPU instead of GPU")
+		("reset", po::bool_switch(), "reset all CUDA capable GPUs")
 	;
 	po::positional_options_description p;
 	p.add("dataset", -1);
@@ -90,6 +91,17 @@ int main(int argc, char **argv) {
 
 	if (vm.count("help")) {
 		std::cout << desc << std::endl;;
+		return 1;
+	}
+
+	if (vm["reset"].as<bool>()) {
+		int count;
+		CUDA_CHECK_RETURN(cudaGetDeviceCount(&count));
+		for (int i = 0; i < count; i++) {
+			std::cout << "Resetting gpu: " << i << std::endl;
+			CUDA_CHECK_RETURN(cudaSetDevice(i));
+			CUDA_CHECK_RETURN(cudaDeviceReset());
+		}
 		return 1;
 	}
 
@@ -111,7 +123,7 @@ int main(int argc, char **argv) {
 		gnet.load_netfile(netf);
 	} else {
 		//init normally
-		net.init(d.num_inputs(), ceil(2.0/3.0*d.num_inputs()), d.num_targets());
+		net.init(d.num_inputs(), ceil(1.0/10.0*d.num_inputs()), d.num_targets());
 		gnet.init(d.num_inputs(), d.num_targets(), GPUNetSettings::STANDARD);
 		gnet.alloc_host_mem();
 		gnet.alloc_dev_mem();

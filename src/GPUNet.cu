@@ -801,7 +801,7 @@ void GPUNet::init_structure(unsigned int ni, unsigned int no, GPUNetSettings::Ne
 		n_output = no;
 		GPUNet::net_type = net_type;
 		if (net_type == GPUNetSettings::STANDARD) {
-			n_hidden = ceil(2.0/3.0*ni);
+			n_hidden = ceil(1.0/10.0*ni);
 		} else if (net_type == GPUNetSettings::GPU_ARCH_OPT) {
 			//get first multiple of 128 greater than 2.0/3.0*ni
 			n_hidden = (2.0/3.0*ni+127) / 128 * 128;
