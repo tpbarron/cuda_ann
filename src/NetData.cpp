@@ -5,12 +5,14 @@
  *      Author: trevor
  */
 
-#include "NetData.h"
-#include <fstream>
 #include <algorithm>
+#include <fstream>
 #include <math.h>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
+
+#include "NetData.h"
 
 NetData::NetData(float tpct) {
 	t_set_pct = tpct;

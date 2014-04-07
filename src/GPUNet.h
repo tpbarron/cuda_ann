@@ -20,16 +20,20 @@
 		exit(1);															\
 	} }
 
+#include <time.h>
+#include <string>
+
+#include <cuda_runtime.h>
+#include <vector_types.h>
+
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+
+#include "GPUNetSettings.h"
 #include "Net.h"
 #include "NetData.h"
 #include "NetIO.h"
-#include "GPUNetSettings.h"
-#include <time.h>
-#include <string>
-#include <cuda_runtime.h>
-#include <vector_types.h>
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
+
 
 class NetIO;
 class GPUNet {

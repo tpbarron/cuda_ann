@@ -9,10 +9,12 @@
 #define PROFILER_H_
 
 #include <time.h>
+
 #include "GPUNet.h"
 #include "Net.h"
-#include "NetTrainer.h"
 #include "NetData.h"
+#include "NetTrainer.h"
+
 
 const int DEFAULT_ITERATIONS = 1000;
 

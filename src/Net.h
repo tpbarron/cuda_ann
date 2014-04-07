@@ -8,9 +8,10 @@
 #ifndef NET_H_
 #define NET_H_
 
+#include <cmath>
 #include <string>
 #include <vector>
-#include <cmath>
+
 #include "NetData.h"
 
 class Net {

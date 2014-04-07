@@ -9,6 +9,7 @@
 #define NETTRAINER_H_
 
 #include <vector>
+
 #include "Net.h"
 
 //defaults

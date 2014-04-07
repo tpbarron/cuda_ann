@@ -5,10 +5,13 @@
  *      Author: trevor
  */
 
-#include "NetIO.h"
-#include <boost/lexical_cast.hpp>
-#include <boost/algorithm/string.hpp>
 #include <fstream>
+
+#include <boost/algorithm/string.hpp>
+#include <boost/lexical_cast.hpp>
+
+#include "NetIO.h"
+
 
 NetIO::NetIO() {
 	gnet = NULL;

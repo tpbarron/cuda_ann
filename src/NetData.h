@@ -8,12 +8,15 @@
 #ifndef NETDATA_H_
 #define NETDATA_H_
 
-#include <vector>
-#include <thrust/host_vector.h>
 #include <cstdlib>
 #include <string>
-#include "FeatureVector.h"
+#include <vector>
+
+#include <thrust/host_vector.h>
+
 #include "TrainingDataSet.h"
+#include "FeatureVector.h"
+
 
 class NetData {
 

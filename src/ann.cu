@@ -1,16 +1,20 @@
-#include <iostream>
+
 #include <cstdio>
+#include <iostream>
 #include <time.h>
-#include "NetData.h"
-#include "Net.h"
-#include "GPUNet.h"
-#include "GPUNetSettings.h"
-#include "NetTrainer.h"
-#include "Profiler.h"
+
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
 
-namespace po = boost::program_options;
+#include "GPUNet.h"
+#include "GPUNetSettings.h"
+#include "Net.h"
+#include "NetData.h"
+#include "NetTrainer.h"
+#include "Profiler.h"
+
+
+namespace boost_po = boost::program_options;
 
 /**
  * This macro checks return value of the CUDA runtime call and exits
@@ -49,7 +53,6 @@ void test(GPUNet &gnet, Net &net, NetData &d) {
 	gnet.init_from_net(net, d);
 	gnet.test_feed_forward(net, d);
 	gnet.test_backprop(net, d);
-	//gnet.test_reduction();
 }
 
 int main(int argc, char **argv) {
@@ -60,31 +63,32 @@ int main(int argc, char **argv) {
 	int max_epochs, save_freq;
 	std::string dset, netf, fbase;
 
-	po::options_description desc("Allowed options");
+	boost_po::options_description desc("Allowed options");
 	desc.add_options()
 		("help,h", "produce help message")
-		("dataset,d", po::value<std::string>(&dset), "data set file")
-		("loadnet,n", po::value<std::string>(&netf), "load net file")
-		("profile,p", po::bool_switch(), "profile GPU functions")
-		("test,t", po::bool_switch(), "test GPU functions")
-		("fbase,f", po::value<std::string>(&fbase)->default_value("itr"), "base name of net file when writing, default = [itr]_#.txt")
-		("l_rate,r", po::value<float>(&l_rate)->default_value(0.7), "learning rate, default = 0.7")
-		("t_pct,c", po::value<float>(&t_set_pct)->default_value(0.8), "percentage of dataset used for training, default = 0.8")
-		("momentum,m", po::value<float>(&momentum)->default_value(0.9), "momentum, default = 0.9")
-		("batch,b", po::bool_switch()->default_value(false), "batch update, default = 0 (false), will ignore momentum")
-		("max_epochs,e", po::value<int>(&max_epochs)->default_value(1000), "max epochs, default = 1000")
-		("save_freq,s", po::value<int>(&save_freq)->default_value(5), "save data every n epochs, default = 5")
-		("cpu", po::bool_switch(), "run on CPU instead of GPU")
-		("reset", po::bool_switch(), "reset all CUDA capable GPUs")
+		("dataset,d", boost_po::value<std::string>(&dset), "data set file")
+		("loadnet,n", boost_po::value<std::string>(&netf), "load net file")
+		("profile,p", boost_po::bool_switch(), "profile GPU functions")
+		("validate,v", boost_po::bool_switch(), "validate GPU functions")
+		("test,t", boost_po::bool_switch(), "run test set, this will take a different random sampling to be the test set on every initialization")
+		("fbase,f", boost_po::value<std::string>(&fbase)->default_value("itr"), "base name of net file when writing, default = [itr]_#.txt")
+		("l_rate,r", boost_po::value<float>(&l_rate)->default_value(0.7), "learning rate, default = 0.7")
+		("t_pct,c", boost_po::value<float>(&t_set_pct)->default_value(0.8), "percentage of dataset used for training, default = 0.8")
+		("momentum,m", boost_po::value<float>(&momentum)->default_value(0.9), "momentum, default = 0.9")
+		("batch,b", boost_po::bool_switch()->default_value(false), "batch update, default = 0 (false), will ignore momentum")
+		("max_epochs,e", boost_po::value<int>(&max_epochs)->default_value(1000), "max epochs, default = 1000")
+		("save_freq,s", boost_po::value<int>(&save_freq)->default_value(5), "save data every n epochs, default = 5")
+		("cpu", boost_po::bool_switch(), "run on CPU instead of GPU")
+		("reset", boost_po::bool_switch(), "reset all CUDA capable GPUs")
 	;
-	po::positional_options_description p;
+	boost_po::positional_options_description p;
 	p.add("dataset", -1);
 
-	po::variables_map vm;
-	po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
-	po::notify(vm);
+	boost_po::variables_map vm;
+	boost_po::store(boost_po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
+	boost_po::notify(vm);
 
-	if (!vm.size()) {
+		if (!vm.size()) {
 		std::cout << "Try: cuda_ann --help\n\n";
 		return 1;
 	}
@@ -105,7 +109,6 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	//std::cout << dset << " " << netf << " " << l_rate << " " << momentum << " " << max_epochs << " " << save_freq << " " << batch << std::endl;
 	if (!vm.count("dataset")) {
 		std::cerr << "Must have dataset parameter" << std::endl;
 		return 1;
@@ -131,7 +134,7 @@ int main(int argc, char **argv) {
 	}
 
 	bool train = true;
-	if (vm["test"].as<bool>()) {
+	if (vm["validate"].as<bool>()) {
 		test(gnet, net, d);
 		train = false;
 	}
@@ -139,6 +142,7 @@ int main(int argc, char **argv) {
 		profile(gnet, net, d);
 		train = false;
 	}
+
 	if (train) {
 		bool batching = vm["batch"].as<bool>();
 		if (batching)
@@ -156,14 +160,19 @@ int main(int argc, char **argv) {
 			stop = clock();
 			std::cout << "CPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 		} else {
-			gnet.set_base_file_name(fbase);
-			gnet.set_save_frequency(save_freq);
-			gnet.set_training_params(l_rate, momentum, batching);
-			gnet.set_stopping_conds(max_epochs, 100.0);
-			start = clock();
-			gnet.train_net_sectioned(d.get_training_dataset());
-			stop = clock();
-			std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
+			if (vm["test"].as<bool>()) {
+				std::cout << "trying to run test set" << std::endl;
+				gnet.run_test_set(d.get_training_dataset());
+			} else {
+				gnet.set_base_file_name(fbase);
+				gnet.set_save_frequency(save_freq);
+				gnet.set_training_params(l_rate, momentum, batching);
+				gnet.set_stopping_conds(max_epochs, 100.0);
+				start = clock();
+				gnet.train_net_sectioned(d.get_training_dataset());
+				stop = clock();
+				std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
+			}
 		}
 	}
 

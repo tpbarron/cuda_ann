@@ -5,8 +5,9 @@
  *      Author: trevor
  */
 
-#include <stdio.h>
 #include <iostream>
+#include <stdio.h>
+
 #include "Profiler.h"
 
 /**

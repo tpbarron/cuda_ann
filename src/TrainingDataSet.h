@@ -8,7 +8,6 @@
 #ifndef TRAININGDATASET_H_
 #define TRAININGDATASET_H_
 
-#include <thrust/host_vector.h>
 
 class TrainingDataSet {
 

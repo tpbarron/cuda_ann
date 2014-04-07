@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <math.h>
+
 #include "NetTrainer.h"
 
 NetTrainer::NetTrainer(Net *net) {

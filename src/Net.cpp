@@ -5,11 +5,13 @@
  *      Author: trevor
  */
 
+#include <fstream>
 #include <math.h>
 #include <stdlib.h>
-#include <fstream>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
+
 #include "Net.h"
 
 Net::Net() {

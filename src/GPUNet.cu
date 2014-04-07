@@ -9,15 +9,19 @@
  *
  */
 
-#include "GPUNet.h"
-#include "NetTrainer.h"
-#include "NetIO.h"
-#include <boost/lexical_cast.hpp>
 #include <stdio.h>
 #include <iostream>
 #include <fstream>
+
+#include <boost/lexical_cast.hpp>
+
 #include <thrust/device_vector.h>
 #include "curand_kernel.h"
+
+#include "GPUNet.h"
+#include "NetIO.h"
+#include "NetTrainer.h"
+
 
 /*
  * ------------ CUDA ------------

@@ -8,9 +8,11 @@
 #ifndef NETIO_H_
 #define NETIO_H_
 
+#include <string>
+
 #include "GPUNet.h"
 #include "GPUNetSettings.h"
-#include <string>
+
 
 class GPUNet;
 class NetIO {
