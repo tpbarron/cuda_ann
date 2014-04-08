@@ -68,6 +68,13 @@ private:
 	float** deltaHiddenOutput;
 	float** rpropDeltaInputHidden;
 	float** rpropDeltaHiddenOutput;
+	float** rpropGradientInputHidden;
+	float** rpropGradientHiddenOutput;
+	float** rpropLastGradientInputHidden;
+	float** rpropLastGradientHiddenOutput;
+
+	float** last_wt_update_input_hidden;
+	float** last_wt_update_hidden_output;
 
 	float* hiddenErrorGradients;
 	float* outputErrorGradients;
@@ -79,6 +86,9 @@ private:
 	}
 	float get_hidden_error_gradient(int j);
 	void run_training_epoch(TrainingDataSet *tset);
+
+	float update_weight_rpropp(float** gradients, float** last_gradients,
+			float** deltas, float** last_wt_changes, int i, int j);
 
 	float min(float a, float b);
 	float max(float a, float b);

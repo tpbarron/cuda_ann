@@ -32,14 +32,14 @@ bool NetIO::read_net(std::string fname) {
 		} else {
 			gnet->net_type = GPUNetSettings::GPU_ARCH_OPT;
 		}
+
 		//skip n_layers
 		get_next_int(in);
 		gnet->n_input = get_next_int(in);
 		gnet->n_hidden = get_next_int(in);
 		gnet->n_output = get_next_int(in);
 
-		//both needed number of nodes per layer
-		gnet->init_vars();
+		gnet->alloc_host_mem();
 		gnet->alloc_dev_mem();
 
 		gnet->epoch = epoch;
@@ -55,10 +55,10 @@ bool NetIO::read_net(std::string fname) {
 
 		gnet->h_ih_weights = get_next_list(in);
 		gnet->h_ho_weights = get_next_list(in);
+
 		// get weights
 		CUDA_CHECK_RETURN(cudaMemcpy(gnet->d_ih_weights, gnet->h_ih_weights, (gnet->n_input+1)*gnet->n_hidden*sizeof(float), cudaMemcpyHostToDevice));
 		CUDA_CHECK_RETURN(cudaMemcpy(gnet->d_ho_weights, gnet->h_ho_weights, (gnet->n_hidden+1)*gnet->n_output*sizeof(float), cudaMemcpyHostToDevice));
-
 		in.close();
 	} else {
 		std::cerr << "NetIO: Could not read net file!" << std::endl;

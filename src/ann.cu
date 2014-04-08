@@ -8,6 +8,7 @@
 
 #include "GPUNet.h"
 #include "GPUNetSettings.h"
+#include "FaceDetect.h"
 #include "Net.h"
 #include "NetData.h"
 #include "NetTrainer.h"
@@ -61,7 +62,7 @@ int main(int argc, char **argv) {
 
 	float l_rate, momentum, t_set_pct, hidden_pct;
 	int max_epochs, save_freq;
-	std::string dset, netf, fbase;
+	std::string dset, netf, fbase, keys;
 
 	boost_po::options_description desc("Allowed options");
 	desc.add_options()
@@ -81,15 +82,18 @@ int main(int argc, char **argv) {
 		("save_freq,s", boost_po::value<int>(&save_freq)->default_value(100), "save data every n epochs, default = 100")
 		("cpu", boost_po::bool_switch(), "run on CPU instead of GPU")
 		("reset", boost_po::bool_switch(), "reset all CUDA capable GPUs")
+		("video", boost_po::bool_switch(), "attempt webcam face detection, for test/demo purposes")
+		("keymap", boost_po::value<std::string>(&keys), "file of comma separated key-value pairs")
 	;
 	boost_po::positional_options_description p;
 	p.add("dataset", -1);
+
 
 	boost_po::variables_map vm;
 	boost_po::store(boost_po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
 	boost_po::notify(vm);
 
-		if (!vm.size()) {
+	if (!vm.size()) {
 		std::cout << "Try: cuda_ann --help\n\n";
 		return 1;
 	}
@@ -120,11 +124,12 @@ int main(int argc, char **argv) {
 		return 1; //if file did not load
 	//d.print_loaded_patterns_flatted();
 
+	bool net_loaded = false;
 	GPUNet gnet;
 	Net net;
 	if (vm.count("loadnet")) {
 		std::cout << "Using netfile to initialize" << std::endl;
-		gnet.load_netfile(netf);
+		net_loaded = gnet.load_netfile(netf);
 	} else {
 		//init normally
 		std::cout << "Using " << hidden_pct << " * " << "n_input for hidden nodes" << std::endl;
@@ -142,6 +147,16 @@ int main(int argc, char **argv) {
 	}
 	if (vm["profile"].as<bool>()) {
 		profile(gnet, net, d);
+		train = false;
+	}
+	if (vm["video"].as<bool>()) {
+		if (!net_loaded) {
+			std::cerr << "Must load from net file" << std::endl;
+		}
+		if (!vm.count("keymap")) {
+			std::cerr << "Must specify keymap" << std::endl;
+		}
+		FaceDetect fd(&gnet, keys);
 		train = false;
 	}
 
@@ -163,13 +178,12 @@ int main(int argc, char **argv) {
 			std::cout << "CPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 		} else {
 			if (vm["test"].as<bool>()) {
-				std::cout << "trying to run test set" << std::endl;
 				gnet.run_test_set(d.get_training_dataset());
 			} else {
 				gnet.set_base_file_name(fbase);
 				gnet.set_save_frequency(save_freq);
 				gnet.set_training_params(l_rate, momentum, batching);
-				gnet.set_stopping_conds(max_epochs, 100.0);
+				gnet.set_stopping_conds(max_epochs, 95.0);
 				start = clock();
 				gnet.train_net_sectioned(d.get_training_dataset());
 				stop = clock();

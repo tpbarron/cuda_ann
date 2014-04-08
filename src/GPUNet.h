@@ -45,7 +45,7 @@ public:
 	GPUNet(std::string net_file);
 	~GPUNet();
 
-	void load_netfile(std::string net_file);
+	bool load_netfile(std::string net_file);
 	void init(unsigned int ni, unsigned int no, float hidden_pct, GPUNetSettings::NetworkStructure net_type);
 
 	void init_nio();
@@ -137,7 +137,7 @@ public:
 	int save_freq;
 	std::string base_file_path;
 
-	int gpu_opt_bprop_bsize, gpu_opt_ff_bsize;
+	int gpu_opt_bprop_bsize, gpu_opt_ff_ih_bsize, gpu_opt_ff_ho_bsize;
 
 	/*
 	 * GPU state

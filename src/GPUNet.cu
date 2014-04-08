@@ -275,6 +275,8 @@ __global__ void feed_forward_layer_v1_2_flat(int n_layer1, int n_layer2, float* 
  * calc each term of linear combination in separate thread,
  * store in shared memory. So reduction in same kernel.
  * Works only if num inputs is less than reasonable blocksize, probably 1024 max.
+ * Reduction code adapted from: NVIDIA presentation
+ * http://developer.download.nvidia.com/compute/cuda/1.1-Beta/x86_website/projects/reduction/doc/reduction.pdf
  *
  */
 
@@ -354,93 +356,13 @@ __global__ void feed_forward_layer_v2_flat(int n_layer1, int n_layer2, float* d_
 	//printf("terms[%d]=%f\n", tid, terms[tid]);
 }
 
-/*
- * Generic version, called with pow of 2 threads
- *
- * NOTE: current setup always had 2/3*ninput hidden nodes or greater
- * This means that each thread corresponding to a hidden node can load 2 input nodes into shared mem
- *
- * If doing
- */
-__global__ void feed_forward_layer_v1_3(int n_layer1, int n_layer2, float* layer1, float* layer2, float* weights) {
-	extern __shared__ float slayer1[]; //get blocksize number of floats
 
-	unsigned int n = blockIdx.x * blockDim.x + threadIdx.x; // node to compute;
-	unsigned int tid = threadIdx.x;
-
-	if (tid < n_layer1) // load blocksize node vals into smem, just take the first ones
-		slayer1[tid] = layer1[tid];
-
-	__syncthreads();
-
-	if (n < n_layer2) {
-		float r = 0;
-		for (int i = 0; i <= n_layer1; ++i) { //include bias
-			if (i < n_layer1 && i < blockDim.x)
-				r += slayer1[i] * weights[n_layer1*n + i];
-			else
-				r += layer1[i] * weights[n_layer1*n + i];
-		}
-		layer2[n] = sigmoid(r);
-	}
-}
-
-
-__global__ void feed_forward_layer_v2_2(unsigned int pow2, int n_layer1, int n_layer2, float* layer1, float* layer2, float* weights, float* sums) {
-	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x; // input node
-	//printf("x = %d\n", x);
-	if (x < (n_layer1+1)*n_layer2) {
-		//printf("x = %d\n", x);
-		int i = x % (n_layer1+1);
-		int j = i % n_layer2;
-		int p = j*pow2 + i;
-		sums[p] = layer1[i] * weights[n_layer1*j + i];
-	}
-}
-
-/*
- * generic version
- */
-__global__ void compute_activation_v2(float* nodes, float *sums, int n_layer, int stride) {
-	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x; // input node
-	if (i < n_layer)
-		nodes[i] = sigmoid(sums[i*stride]);
-}
 
 __global__ void clamp_outputs(float *output, int n) {
 	unsigned int i = blockIdx.x * blockDim.x+threadIdx.x;
 	if (i < n) {
 		output[i] = clamp(output[i]);
 	}
-}
-
-/*
- * Copied form NVIDIA presentation
- * http://developer.download.nvidia.com/compute/cuda/1.1-Beta/x86_website/projects/reduction/doc/reduction.pdf
- */
-template <unsigned int blockSize>
-__global__ void reduce_kernel(float *g_idata, float *g_odata, unsigned int n, int offset) {
-	g_idata = &(g_idata[n*offset]);
-	extern __shared__ float sdata[];
-
-	__syncthreads();unsigned int tid = threadIdx.x;
-	unsigned int i = blockIdx.x*(blockSize*2) + tid;
-	unsigned int gridSize = blockSize*2*gridDim.x;
-	sdata[tid] = 0;
-	while (i < n) { sdata[tid] += g_idata[i] + g_idata[i+blockSize]; i += gridSize; }
-	__syncthreads();
-
-	if (blockSize >= 512) { if (tid < 256) { sdata[tid] += sdata[tid + 256]; } __syncthreads(); }
-	if (blockSize >= 256) {if (tid < 128) { sdata[tid] += sdata[tid + 128]; } __syncthreads(); }
-	if (blockSize >= 128) {if (tid < 64) { sdata[tid] += sdata[tid + 64]; } __syncthreads(); }
-	if (tid < 32) { if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
-		if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
-		if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
-		if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
-		if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
-		if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
-	}
-	if (tid == 0) g_odata[blockIdx.x] = sdata[0];
 }
 
 
@@ -486,7 +408,6 @@ __global__ void update_hidden_output_deltas_v2(int nh, int no, float l_rate, flo
 	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
 
 	if (x < (nh+1)*no) { // if in range
-		//NOTE: this was my bug, had (x % nh) not (x % (nh+1))
 		//int j = x % (nh+1); //hidden node
 		//int k = x / (nh+1);
 
@@ -504,9 +425,7 @@ __global__ void update_hidden_output_deltas_v2(int nh, int no, float l_rate, flo
 }
 
 
-/*
- * TODO: I am using n_layer1*j+i to address weights. But this is less efficient here since need to access all outputs
- */
+
 __device__ __inline__ float calc_hidden_gradient(int j, int nh, int no, float* hidden, float* d_ho_weights, float* output_err_gradients) {
 	//get sum of hidden->output weights * output error gradients
 	float s = 0;
@@ -596,35 +515,35 @@ __global__ void update_input_hidden_deltas_v2(int ni, int nh, float l_rate, floa
 	}
 }
 
-__constant__ __device__ float delta_min = -0.01;
-__constant__ __device__ float delta_max = 0.01;
-
 /*
  * called generically with power of 2 threads
  */
-__global__ void update_weights_v2(int n1, int n2, float *d_weights, float *deltas, bool reset) {
+__global__ void update_weights_v2(int n1, int n2, float *d_weights, float *deltas) {
 	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
 
+	if (x < (n1+1)*n2) {
+		//Indexing is irrelevant here
+		d_weights[x] += deltas[x];
+	}
+}
+
+__constant__ __device__ float delta_min = -0.01;
+__constant__ __device__ float delta_max = 0.01;
+/*
+ * splitting kernels to save stochastic update a few comparisons
+ */
+__global__ void update_weights_batch_v2(int n1, int n2, float *d_weights, float *deltas) {
+	unsigned int x = blockIdx.x * blockDim.x+threadIdx.x;
 
 	if (x < (n1+1)*n2) {
-		//int i = x % (n1+1); //layer 1 node, NOTE: same bug
-		//int j = x % n2; //layer 2 node
-
-		//d_weights[n1*j + i] += deltas[n1*j + i];
-
-		//printf("d_weights(%d) = %f, deltas(%d) = %f\n", x, d_weights[x], x, deltas[x]);
 		//Indexing is irrelevant here
-		if (reset) {
-			if (deltas[x] > delta_max) //using batch
-				d_weights[x] += delta_max;
-			else if (deltas[x] < delta_min)
-				d_weights[x] += delta_min;
-			else
-				d_weights[x] += deltas[x];
-			deltas[x] = 0;
-		} else {
+		if (deltas[x] > delta_max) //using batch
+			d_weights[x] += delta_max;
+		else if (deltas[x] < delta_min)
+			d_weights[x] += delta_min;
+		else
 			d_weights[x] += deltas[x];
-		}
+		deltas[x] = 0;
 	}
 }
 
@@ -775,11 +694,12 @@ GPUNet::~GPUNet() {
 	delete nio;
 }
 
-void GPUNet::load_netfile(std::string net_file) {
-	std::cout << "Initializing from net file: " << net_file << "." << std::endl;
+bool GPUNet::load_netfile(std::string net_file) {
+	std::cout << "Initializing from net file: " << net_file << std::endl;
 	GPUNet::init_nio();
-	GPUNet::read_net(net_file);
+	bool loaded = GPUNet::read_net(net_file);
 	GPUNet::set_bsizes();
+	return loaded;
 }
 
 
@@ -843,7 +763,8 @@ void GPUNet::init_vars() {
 	n_output = 0;
 
 	gpu_opt_bprop_bsize = 0;
-	gpu_opt_ff_bsize = 0;
+	gpu_opt_ff_ih_bsize = 0;
+	gpu_opt_ff_ho_bsize = 0;
 
 	/*
 	 * device
@@ -878,8 +799,10 @@ void GPUNet::set_bsizes() {
 	//get first power of 2 larger than n_output
 	gpu_opt_bprop_bsize = pow2roundup(n_output);
 	std::cout << "bprop bsize=" << gpu_opt_bprop_bsize << ", ";
-	gpu_opt_ff_bsize = pow2roundup(n_input+1);
-	std::cout << "ff bsize=" << gpu_opt_ff_bsize << std::endl;
+	gpu_opt_ff_ih_bsize = pow2roundup(n_input+1);
+	gpu_opt_ff_ho_bsize = pow2roundup(n_hidden+1);
+	std::cout << "ff ih bsize=" << gpu_opt_ff_ih_bsize << ", ";
+	std::cout << "ff ho bsize=" << gpu_opt_ff_ho_bsize << std::endl;
 }
 
 void GPUNet::alloc_host_mem() {
@@ -928,8 +851,6 @@ void GPUNet::alloc_dev_mem() {
 	CUDA_CHECK_RETURN(cudaStreamCreate(&copy_stream));
 	CUDA_CHECK_RETURN(cudaEventCreate(&event1));
 	CUDA_CHECK_RETURN(cudaEventCreate(&event2));
-
-	std::cout << "Memory allocated on device" << std::endl;
 }
 
 /*
@@ -1059,7 +980,6 @@ bool GPUNet::read_net(std::string fname) {
 
 	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 	//init nodes to 0
-	init_nodes_layer_v2<<<(n_input+1+threads-1)/threads, threads>>>(n_input+1, d_input);
 	init_nodes_layer_v2<<<(n_hidden+1+threads-1)/threads, threads>>>(n_hidden+1, d_hidden);
 	init_nodes_output_v2<<<(n_output+threads-1)/threads, threads>>>(n_output, d_output);
 
@@ -1073,15 +993,18 @@ bool GPUNet::read_net(std::string fname) {
 
 void GPUNet::run_test_set(TrainingDataSet *tset) {
 	std::cout << std::endl << "Running test set: " << std::endl;
+	calc_dataset_parameters(tset);
 
 	float* d_test_set;
-	//by default allocate array as large as possible
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_test_set, n_copyable_patterns*tset->fpp*sizeof(float)));
+	//TODO: this assumes that the validation set always fits in GPU memory. Fine for now.
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_test_set, tset->n_validation*tset->fpp*sizeof(float)));
 	CUDA_CHECK_RETURN(cudaMemcpy(d_test_set, tset->validation_set, tset->n_validation*tset->fpp*sizeof(float), cudaMemcpyHostToDevice));
 
 	for (int i = 0; i < tset->n_validation; ++i) {
 		//wait for error calculation to finish before doing next feed forward iteration
 		CUDA_CHECK_RETURN(cudaStreamSynchronize(err_calc_stream));
+		//Because all error calculations are done in the same stream the next one cannot begin before the previous one finishes
+		//even if it is called before it is finished. So no need to synchronize.
 		//called with index of start position of target
 		feed_forward_v1_2(d_test_set, i*tset->fpp);
 		mse_sum_v2<<<1, 1, 0, err_calc_stream>>>(d_output, d_test_set, i*tset->fpp+n_input+1, n_output);
@@ -1209,6 +1132,13 @@ void GPUNet::train_net_sectioned_overlap(TrainingDataSet *tset) {
 	std::cout << "ACC = " << trainingSetAccuracy << std::endl;
 }
 
+__global__ void printtset(float* set, int n) {
+	for (int i = 0; i < n; i++) {
+		printf("%f ", set[i]);
+	}
+	printf("\n");
+}
+
 
 void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 	calc_dataset_parameters(tset);
@@ -1234,6 +1164,8 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 				std::string fname = base_file_path + "_" + boost::lexical_cast<std::string>(epoch) + ".net";
 				std::cout << "Writing intermediary net " << fname << std::endl;
 				write_net(fname);
+				if (trainingSetAccuracy > desired_acc)
+					break; //just run test set
 			}
 		}
 	} else {
@@ -1270,6 +1202,7 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 }
 
 void GPUNet::copy_error_to_host(float* mse, float* acc) {
+	CUDA_CHECK_RETURN(cudaStreamSynchronize(err_calc_stream)); //make sure error calculation has completed.
 	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(mse, d_mse, sizeof(float), 0, cudaMemcpyDeviceToHost));
 	CUDA_CHECK_RETURN(cudaMemcpyFromSymbol(acc, d_acc, sizeof(float), 0, cudaMemcpyDeviceToHost));
 }
@@ -1278,20 +1211,28 @@ void GPUNet::copy_error_to_host(float* mse, float* acc) {
 void GPUNet::run_training_epoch_dev(float *set, int n_features, int fpp) {
 	int n_threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 	start = clock();
+	if (batching) {
+		//if doing batch make sure weights have been updated after last epoch
+		CUDA_CHECK_RETURN(cudaStreamSynchronize(weight_update_stream1));
+		CUDA_CHECK_RETURN(cudaStreamSynchronize(weight_update_stream2));
+	}
 	for (int i = 0; i < n_features; ++i) {
 		//called with index of start position of target
-		feed_forward_v1_2(set, i*fpp);
-		backprop_v2(set, i*fpp, i*fpp+n_input+1);
-		if (!batching) //need to wait for weight update, otherwise no sync because gradients and deltas in same stream
-			CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+		if (!batching) {
+			//need to wait for weight update, otherwise no sync because gradients and deltas in same stream
+			CUDA_CHECK_RETURN(cudaStreamSynchronize(weight_update_stream1));
+			CUDA_CHECK_RETURN(cudaStreamSynchronize(weight_update_stream2));
+		}
+		feed_forward_v2(set, i*fpp);
+		backprop_v3(set, i*fpp, i*fpp+n_input+1);
 	}
 	if (batching) { //update weights here and reset deltas
 		CUDA_CHECK_RETURN(cudaEventRecord(event1, bprop_stream));
 		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream1, event1, 0));
 		CUDA_CHECK_RETURN(cudaEventRecord(event2, bprop_stream));
 		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream2, event2, 0));
-		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream1>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas, true);
-		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, true);
+		update_weights_batch_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream1>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas);
+		update_weights_batch_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas);
 	}
 	calc_mse<<<1, 1, 0, err_calc_stream>>>(n_output, n_features);
 	calc_acc<<<1, 1, 0, err_calc_stream>>>(n_features);
@@ -1325,7 +1266,7 @@ void GPUNet::backprop_v2(float* d_set, int i, int t) {
 	if (!batching) { // don't update weights here
 		CUDA_CHECK_RETURN(cudaEventRecord(event1, bprop_stream));
 		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream1, event1, 0));
-		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream1>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas, false);
+		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream1>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas);
 	}
 
 	update_input_hidden_deltas_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_input, n_hidden, l_rate, momentum,
@@ -1334,19 +1275,7 @@ void GPUNet::backprop_v2(float* d_set, int i, int t) {
 	if (!batching) { // don't update weights here
 		CUDA_CHECK_RETURN(cudaEventRecord(event2, bprop_stream));
 		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream2, event2, 0));
-		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
-
-//		int n_streams = 4;
-//		cudaStream_t *streams = (cudaStream_t*)malloc(n_streams*sizeof(cudaStream_t));
-//
-//		for (int i = 0; i < n_streams; ++i) {
-//			CUDA_CHECK_RETURN(cudaStreamCreate(&streams[i]));
-//			update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, streams[i]>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
-//		}
-//
-//		for (int i = 0; i < n_streams; ++i) {
-//			CUDA_CHECK_RETURN(cudaStreamDestroy(streams[i]));
-//		}
+		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas);
 	}
 }
 
@@ -1368,49 +1297,30 @@ void GPUNet::backprop_v3(float* d_set, int i, int t) {
 	update_hidden_output_deltas_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, l_rate, momentum, d_hidden, d_out_err_gradients, d_ho_deltas);
 	//CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 
-	switch (gpu_opt_bprop_bsize) {
-	case 1:
+	if (gpu_opt_bprop_bsize <= 1) {
 		hidden_error_gradients_v2<<<(n_hidden+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
-					d_hid_err_gradients, d_out_err_gradients);
-		break;
-	case 2:
-		hidden_error_gradients_v3<2><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
-		break;
-	case 4:
-		hidden_error_gradients_v3<4><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
-				d_hid_err_gradients, d_out_err_gradients);
-		break;
-	case 8:
-		hidden_error_gradients_v3<8><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+	} else if (gpu_opt_bprop_bsize <= 32) {
+		hidden_error_gradients_v3<32><<<n_hidden, 32, 32*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
-		break;
-	case 16:
-		hidden_error_gradients_v3<16><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+	} else if (gpu_opt_bprop_bsize <= 64) {
+		hidden_error_gradients_v3<64><<<n_hidden, 64, 64*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
-		break;
-	case 32:
-		hidden_error_gradients_v3<32><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+	} else if (gpu_opt_bprop_bsize <= 128) {
+		hidden_error_gradients_v3<128><<<n_hidden, 128, 128*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
-		break;
-	case 64:
-		hidden_error_gradients_v3<64><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+	} else if (gpu_opt_bprop_bsize <= 256) {
+		hidden_error_gradients_v3<256><<<n_hidden, 256, 256*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
-		break;
-	case 128:
-		hidden_error_gradients_v3<128><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
+	} else {
+		hidden_error_gradients_v2<<<(n_hidden+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
 			d_hid_err_gradients, d_out_err_gradients);
-		break;
-	case 256:
-		hidden_error_gradients_v3<256><<<n_hidden, gpu_opt_bprop_bsize, gpu_opt_bprop_bsize*sizeof(float), bprop_stream>>>(n_hidden, n_output, d_hidden, d_ho_weights,
-			d_hid_err_gradients, d_out_err_gradients);
-		break;
 	}
 
 	if (!batching) { // don't update weights here
 		CUDA_CHECK_RETURN(cudaEventRecord(event1, bprop_stream));
 		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream1, event1, 0));
-		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream1>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas, false);
+		update_weights_v2<<<((n_output*(n_hidden+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream1>>>(n_hidden, n_output, d_ho_weights, d_ho_deltas);
 	}
 
 	update_input_hidden_deltas_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, bprop_stream>>>(n_input, n_hidden, l_rate, momentum,
@@ -1419,7 +1329,7 @@ void GPUNet::backprop_v3(float* d_set, int i, int t) {
 	if (!batching) { // don't update weights here
 		CUDA_CHECK_RETURN(cudaEventRecord(event2, bprop_stream));
 		CUDA_CHECK_RETURN(cudaStreamWaitEvent(weight_update_stream2, event2, 0));
-		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas, false);
+		update_weights_v2<<<((n_hidden*(n_input+1))+n_threads-1)/n_threads, n_threads, 0, weight_update_stream2>>>(n_input, n_hidden, d_ih_weights, d_ih_deltas);
 	}
 }
 
@@ -1441,51 +1351,37 @@ void GPUNet::feed_forward_v1_2(float* d_set, int i) {
  * TODO: what if the first layer cannot be done using the reduction but the second layer can
  */
 void GPUNet::feed_forward_v2(float* d_set, int i) {
-	switch (gpu_opt_ff_bsize) {
-	case 1:
-		feed_forward_layer_v2_flat<1><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<1><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-		break;
-	case 2:
-		feed_forward_layer_v2_flat<2><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<2><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-		break;
-	case 4:
-		feed_forward_layer_v2_flat<4><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<4><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-		break;
-	case 8:
-		feed_forward_layer_v2_flat<8><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<8><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-		break;
-	case 16:
-		feed_forward_layer_v2_flat<16><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<16><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-		break;
-	case 32:
-		feed_forward_layer_v2_flat<32><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<32><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-		break;
-	case 64:
-		feed_forward_layer_v2_flat<64><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<64><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-		break;
-	case 128:
-		feed_forward_layer_v2_flat<128><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<128><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-		break;
-	case 256:
-		feed_forward_layer_v2_flat<256><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<256><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-		break;
-	case 512:
-		feed_forward_layer_v2_flat<512><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<512><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-		break;
-	case 1024:
-		feed_forward_layer_v2_flat<1024><<<n_hidden, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
-		feed_forward_layer_v2<1024><<<n_output, gpu_opt_ff_bsize, gpu_opt_ff_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
-		break;
+	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
+	if (gpu_opt_ff_ih_bsize <= 32) {
+		feed_forward_layer_v2_flat<32><<<n_hidden, 32, 32*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+	} else if (gpu_opt_ff_ih_bsize <= 64) {
+		feed_forward_layer_v2_flat<64><<<n_hidden, 64, 64*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+	} else if (gpu_opt_ff_ih_bsize <= 128) {
+		feed_forward_layer_v2_flat<128><<<n_hidden, 128, 128*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+	} else if (gpu_opt_ff_ih_bsize <= 256) {
+		feed_forward_layer_v2_flat<256><<<n_hidden, 256, 256*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+	} else if (gpu_opt_ff_ih_bsize <= 512) {
+		feed_forward_layer_v2_flat<512><<<n_hidden, 512, 512*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+	} else if (gpu_opt_ff_ih_bsize <= 1024) {
+		feed_forward_layer_v2_flat<1024><<<n_hidden, 1024, 1024*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+	} else {
+		feed_forward_layer_v1_2_flat<<<(n_hidden+threads-1)/threads, threads>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+	}
+
+	if (gpu_opt_ff_ho_bsize <= 32) {
+		feed_forward_layer_v2<32><<<n_output, 32, 32*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+	} else if (gpu_opt_ff_ho_bsize <= 64) {
+		feed_forward_layer_v2<64><<<n_output, 64, 64*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+	} else if (gpu_opt_ff_ho_bsize <= 128) {
+		feed_forward_layer_v2<128><<<n_output, 128, 128*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+	} else if (gpu_opt_ff_ho_bsize <= 256) {
+		feed_forward_layer_v2<256><<<n_output, 256, 256*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+	} else if (gpu_opt_ff_ho_bsize <= 512) {
+		feed_forward_layer_v2<512><<<n_output, 512, 512*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+	} else if (gpu_opt_ff_ho_bsize <= 1024) {
+		feed_forward_layer_v2<1024><<<n_output, 1024, 1024*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+	} else {
+		feed_forward_layer_v1_2<<<(n_output+threads-1)/threads, threads>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
 	}
 }
 
