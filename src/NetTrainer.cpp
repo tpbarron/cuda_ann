@@ -53,8 +53,8 @@ NetTrainer::NetTrainer(Net *net) {
 		for (int j = 0; j < net->n_hidden; ++j) {
 			NetTrainer::deltaInputHidden[i][j] = 0;
 			NetTrainer::rpropDeltaInputHidden[i][j] = 0.1;
-			NetTrainer::rpropGradientInputHidden[i][j] = 0.1;
-			NetTrainer::rpropLastGradientInputHidden[i][j] = 0.1;
+			NetTrainer::rpropGradientInputHidden[i][j] = 0;
+			NetTrainer::rpropLastGradientInputHidden[i][j] = 0;
 			NetTrainer::last_wt_update_input_hidden[i][j] = 0;
 		}
 	}
@@ -73,8 +73,8 @@ NetTrainer::NetTrainer(Net *net) {
 		for (int j = 0; j < net->n_output; ++j) {
 			NetTrainer::deltaHiddenOutput[i][j] = 0;
 			NetTrainer::rpropDeltaHiddenOutput[i][j] = 0.1;
-			NetTrainer::rpropGradientHiddenOutput[i][j] = 0.1;
-			NetTrainer::rpropLastGradientHiddenOutput[i][j] = 0.1;
+			NetTrainer::rpropGradientHiddenOutput[i][j] = 0;
+			NetTrainer::rpropLastGradientHiddenOutput[i][j] = 0;
 			NetTrainer::last_wt_update_hidden_output[i][j] = 0;
 		}
 	}
@@ -203,9 +203,7 @@ void NetTrainer::run_training_epoch(TrainingDataSet *tset) {
 	std::cout << "running training epoch" << std::endl;
 	//for every training pattern
 	for (int tp = 0; tp < tset->n_training; tp++) {
-
 		//feed inputs through network and backpropagate errors
-
 		float* input = &(tset->training_set[tp*tset->fpp]);
 		float* target = &(tset->training_set[tp*tset->fpp+tset->n_input+1]);
 		net->feed_forward(input);

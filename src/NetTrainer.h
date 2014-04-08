@@ -84,6 +84,8 @@ private:
 	inline float get_output_error_gradient(float target, float output) {
 		return output * (1 - output) * (target - output);
 	}
+	inline int sign();
+
 	float get_hidden_error_gradient(int j);
 	void run_training_epoch(TrainingDataSet *tset);
 

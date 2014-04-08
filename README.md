@@ -10,6 +10,3 @@
 
 NVidia GTX 660 graphics card
 Theoretical peak bandwidth = Specs say 144.2 gb / sec
-980 * 10^6 * 192 * 2 / 1024^3
-Hz       mem interface
-
