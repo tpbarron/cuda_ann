@@ -828,6 +828,7 @@ void GPUNet::alloc_host_mem() {
 
 void GPUNet::alloc_dev_mem() {
 	//nodes
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_input, (n_input+1)*sizeof(float)));
 	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_hidden, (n_hidden+1)*sizeof(float)));
 	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_output, (n_output)*sizeof(float)));
 	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_target, (n_output)*sizeof(float)));
@@ -871,11 +872,11 @@ void GPUNet::init_from_net(Net &net, NetData &d) {
 	//}
 
 	// so hidden and output initialized to 0
-	//CUDA_CHECK_RETURN(cudaMemcpy(d_input, net.inputNeurons, (net.n_input)*sizeof(float), cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemcpy(d_input, net.inputNeurons, (net.n_input)*sizeof(float), cudaMemcpyHostToDevice));
 	CUDA_CHECK_RETURN(cudaMemcpy(d_hidden, net.hiddenNeurons, (net.n_hidden)*sizeof(float), cudaMemcpyHostToDevice));
 	CUDA_CHECK_RETURN(cudaMemcpy(d_output, net.outputNeurons, (net.n_output)*sizeof(float), cudaMemcpyHostToDevice));
 
-	//set_bias<<<1,1>>>(n_input, d_input);
+	set_bias<<<1,1>>>(n_input, d_input);
 	set_bias<<<1,1>>>(n_hidden, d_hidden);
 
 	CUDA_CHECK_RETURN(cudaMemcpy(d_ih_weights, net.wInputHidden, (net.n_input+1)*(net.n_hidden)*sizeof(float), cudaMemcpyHostToDevice));
@@ -892,9 +893,11 @@ void GPUNet::init_net() {
 	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 
 	//init nodes to all 0
-	//init_nodes_layer_v2<<<(n_input+1+threads-1)/threads, threads>>>(n_input+1, d_input);
+	init_nodes_layer_v2<<<(n_input+1+threads-1)/threads, threads>>>(n_input+1, d_input);
 	init_nodes_layer_v2<<<(n_hidden+1+threads-1)/threads, threads>>>(n_hidden+1, d_hidden);
 	init_nodes_output_v2<<<(n_output+threads-1)/threads, threads>>>(n_output, d_output);
+	set_bias<<<1,1>>>(n_input, d_input);
+	set_bias<<<1,1>>>(n_hidden, d_hidden);
 
 	//init weights to random vals
 	curandState *state;
@@ -985,9 +988,11 @@ bool GPUNet::read_net(std::string fname) {
 
 	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 	//init nodes to 0
+	init_nodes_layer_v2<<<(n_input+1+threads-1)/threads, threads>>>(n_input+1, d_input);
 	init_nodes_layer_v2<<<(n_hidden+1+threads-1)/threads, threads>>>(n_hidden+1, d_hidden);
 	init_nodes_output_v2<<<(n_output+threads-1)/threads, threads>>>(n_output, d_output);
-
+	set_bias<<<1,1>>>(n_input, d_input);
+	set_bias<<<1,1>>>(n_hidden, d_hidden);
 	//init deltas to 0
 	init_deltas_v2<<<((n_input+1)*n_hidden+threads-1)/threads, threads>>>(n_input+1, n_hidden, d_ih_deltas);
 	init_deltas_v2<<<((n_hidden+1)*n_output+threads-1)/threads, threads>>>(n_hidden+1, n_output, d_ho_deltas);
@@ -1035,7 +1040,7 @@ float* GPUNet::evaluate(float* input) {
 	//copy back output
 	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 	float *h_out = new float[n_output];
-	CUDA_CHECK_RETURN(cudaMemcpy((void*)d_input, (void*)input, (n_input+1)*sizeof(float), cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemcpy(d_input, input, (n_input)*sizeof(float), cudaMemcpyHostToDevice));
 	feed_forward_v1_2(d_input, 0);
 	clamp_outputs<<<(n_output+threads-1)/threads, threads>>>(d_output, n_output);
 	CUDA_CHECK_RETURN(cudaMemcpy(h_out, d_output, n_output*sizeof(float), cudaMemcpyDeviceToHost));
