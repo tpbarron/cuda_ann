@@ -67,7 +67,7 @@ void Profiler::cuda_stop() {
  * BW_effective = (Rb + Wb) / (t * 10^9)
  */
 float Profiler::profile_feed_forward_v1_2(NetData &d) {
-	std::cout << "Profiling feed forward v1.2 over " << iterations << " iterations." << std::endl;
+	std::cout << "Profiling feed forward v1.2 over " << iterations << " iterations. ";
 
 	TrainingDataSet *tset = d.get_training_dataset();
 	float *d_training_set;
@@ -93,13 +93,13 @@ float Profiler::profile_feed_forward_v1_2(NetData &d) {
 
 	float bw_effective = bytes_total / (milliseconds * 1e6);
 
-	std::cout << milliseconds << " ms" << std::endl;
-	std::cout << "Effective bandwidth: " << bw_effective << std::endl;
+	std::cout << milliseconds << " ms" << std::endl << std::endl;
+	//std::cout << "Effective bandwidth: " << bw_effective << std::endl;
 	return milliseconds;
 }
 
 float Profiler::profile_feed_forward_v2(NetData &d) {
-	std::cout << "Profiling feed forward v2 over " << iterations << " iterations." << std::endl;
+	std::cout << "Profiling feed forward v2 over " << iterations << " iterations. ";
 
 	TrainingDataSet *tset = d.get_training_dataset();
 	float *d_training_set;
@@ -117,18 +117,17 @@ float Profiler::profile_feed_forward_v2(NetData &d) {
 	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
 	CUDA_CHECK_RETURN(cudaFree(d_training_set));
 
-	std::cout << milliseconds << " ms" << std::endl;
+	std::cout << milliseconds << " ms" << std::endl << std::endl;
 	return milliseconds;
 }
 
 
 float Profiler::profile_backprop_v2(NetData &d) {
-	std::cout << "Profiling backprop v2 over " << iterations << " iterations." << std::endl;
+	std::cout << "Profiling backprop v2 over " << iterations << " iterations. ";
 
 	TrainingDataSet *tset = d.get_training_dataset();
 	float *d_training_set;
 	gnet->copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
-
 
 	cuda_start();
 
@@ -136,18 +135,17 @@ float Profiler::profile_backprop_v2(NetData &d) {
 		gnet->backprop_v2(d_training_set, 0, gnet->n_input+1);
 	}
 
-
 	cuda_stop();
 	float milliseconds = 0;
 	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
 	CUDA_CHECK_RETURN(cudaFree(d_training_set));
 
-	std::cout << milliseconds << " ms" << std::endl;
+	std::cout << milliseconds << " ms" << std::endl << std::endl;
 	return milliseconds;
 }
 
 float Profiler::profile_backprop_v3(NetData &d) {
-	std::cout << "Profiling backprop v3 over " << iterations << " iterations." << std::endl;
+	std::cout << "Profiling backprop v3 over " << iterations << " iterations. ";
 
 	TrainingDataSet *tset = d.get_training_dataset();
 	float *d_training_set;
@@ -164,12 +162,12 @@ float Profiler::profile_backprop_v3(NetData &d) {
 	cudaEventElapsedTime(&milliseconds, cu_start, cu_stop);
 	CUDA_CHECK_RETURN(cudaFree(d_training_set));
 
-	std::cout << milliseconds << " ms" << std::endl;
+	std::cout << milliseconds << " ms" << std::endl << std::endl;
 	return milliseconds;
 }
 
 float Profiler::profile_cpu_backprop(float *targets) {
-	std::cout << "Profiling cpu backprop over " << iterations << " iterations." << std::endl;
+	std::cout << "Profiling cpu backprop over " << iterations << " iterations. ";
 
 	start = clock();
 
@@ -179,12 +177,12 @@ float Profiler::profile_cpu_backprop(float *targets) {
 
 	stop = clock();
 	long milliseconds = ((float)stop - start) / CLOCKS_PER_SEC * 1000.0;
-	std::cout << milliseconds << " ms" << std::endl;
+	std::cout << milliseconds << " ms" << std::endl << std::endl;
 	return milliseconds;
 }
 
 float Profiler::profile_cpu_feedforward(float *input) {
-	std::cout << "Profiling cpu feedforward over " << iterations << " iterations." << std::endl;
+	std::cout << "Profiling cpu feedforward over " << iterations << " iterations. ";
 
 	start = clock();
 
@@ -194,7 +192,7 @@ float Profiler::profile_cpu_feedforward(float *input) {
 
 	stop = clock();
 	long milliseconds = ((float)stop - start) / CLOCKS_PER_SEC * 1000.0;
-	std::cout << milliseconds << " ms" << std::endl;
+	std::cout << milliseconds << " ms" << std::endl << std::endl;
 	return milliseconds;
 }
 

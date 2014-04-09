@@ -37,10 +37,11 @@ public:
 	void print_loaded_patterns();
 	void print_loaded_patterns_flatted();
 
+	std::vector<FeatureVector*> data;
 private:
 
 	// storage
-	std::vector<FeatureVector*> data;
+
 	unsigned int n_patterns;
 	unsigned int n_inputs;
 	unsigned int n_targets;

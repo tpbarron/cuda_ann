@@ -1,4 +1,3 @@
-
 #include <cstdio>
 #include <iostream>
 #include <time.h>
@@ -8,7 +7,6 @@
 
 #include "GPUNet.h"
 #include "GPUNetSettings.h"
-#include "FaceDetect.h"
 #include "Net.h"
 #include "NetData.h"
 #include "NetTrainer.h"
@@ -62,7 +60,7 @@ int main(int argc, char **argv) {
 
 	float l_rate, momentum, t_set_pct, hidden_pct;
 	int max_epochs, save_freq;
-	std::string dset, netf, fbase, keys;
+	std::string dset, netf, fbase;
 
 	boost_po::options_description desc("Allowed options");
 	desc.add_options()
@@ -82,8 +80,7 @@ int main(int argc, char **argv) {
 		("save_freq,s", boost_po::value<int>(&save_freq)->default_value(100), "save data every n epochs, default = 100")
 		("cpu", boost_po::bool_switch(), "run on CPU instead of GPU")
 		("reset", boost_po::bool_switch(), "reset all CUDA capable GPUs")
-		("video", boost_po::bool_switch(), "attempt webcam face detection, for test/demo purposes")
-		("keymap", boost_po::value<std::string>(&keys), "file of comma separated key-value pairs")
+		("parallel", boost_po::bool_switch(), "Run networks in parallel on CPU and GPU to compare")
 	;
 	boost_po::positional_options_description p;
 	p.add("dataset", -1);
@@ -140,6 +137,18 @@ int main(int argc, char **argv) {
 		gnet.init_from_net(net, d);
 	}
 
+//	FeatureVector **dv;
+//	thrust::host_vector<FeatureVector*> hv;
+//	for (int i = 0; i < d.data.size(); ++i) {
+//		hv.push_back(d.data[i]);
+//	}
+//	gnet.copy_to_device_host_array_ptrs_biased(hv,&dv);
+//
+//	float*d_set;
+//	gnet.copy_to_device(d.get_training_dataset()->training_set, d.get_training_dataset()->n_training, d.get_training_dataset()->fpp, &d_set);
+//
+//	return 0;
+
 	bool train = true;
 	if (vm["validate"].as<bool>()) {
 		test(gnet, net, d);
@@ -149,14 +158,8 @@ int main(int argc, char **argv) {
 		profile(gnet, net, d);
 		train = false;
 	}
-	if (vm["video"].as<bool>()) {
-		if (!net_loaded) {
-			std::cerr << "Must load from net file" << std::endl;
-		}
-		if (!vm.count("keymap")) {
-			std::cerr << "Must specify keymap" << std::endl;
-		}
-		FaceDetect fd(&gnet, keys);
+	if (vm["parallel"].as<bool>()) {
+		gnet.run_parallel(net, d);
 		train = false;
 	}
 
@@ -185,7 +188,7 @@ int main(int argc, char **argv) {
 				gnet.set_training_params(l_rate, momentum, batching);
 				gnet.set_stopping_conds(max_epochs, 95.0);
 				start = clock();
-				gnet.train_net_sectioned(d.get_training_dataset());
+				gnet.train_net_sectioned_overlap(d.get_training_dataset());
 				stop = clock();
 				std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 			}

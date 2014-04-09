@@ -160,8 +160,8 @@ void NetTrainer::train_net(TrainingDataSet *tset) {
 		run_training_epoch(tset);
 
 		//get generalization set accuracy and MSE
-		generalizationSetAccuracy = net->get_set_accuracy(tset->generalization_set, tset->n_generalization, tset->fpp);
-		generalizationSetMSE = net->get_set_mse(tset->generalization_set, tset->n_generalization, tset->fpp);
+		//generalizationSetAccuracy = net->get_set_accuracy(tset->generalization_set, tset->n_generalization, tset->fpp);
+		//generalizationSetMSE = net->get_set_mse(tset->generalization_set, tset->n_generalization, tset->fpp);
 
 		//print out change in training /generalization accuracy (only if a change is greater than a percent)
 		if (ceil(previousTAccuracy) != ceil(trainingSetAccuracy) || ceil(previousGAccuracy) != ceil(generalizationSetAccuracy)) {
@@ -200,15 +200,13 @@ void NetTrainer::run_training_epoch(TrainingDataSet *tset) {
 	int incorrectPatterns = 0;
 	float mse = 0;
 
-	std::cout << "running training epoch" << std::endl;
-	//for every training pattern
 	for (int tp = 0; tp < tset->n_training; tp++) {
 		//feed inputs through network and backpropagate errors
 		float* input = &(tset->training_set[tp*tset->fpp]);
 		float* target = &(tset->training_set[tp*tset->fpp+tset->n_input+1]);
 		net->feed_forward(input);
-		//backprop(target);
-		rprop(target);
+		backprop(target);
+		//rprop(target);
 
 		//pattern correct flag
 		bool patternCorrect = true;

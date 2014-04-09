@@ -40,6 +40,8 @@ public:
 	void rprop(float* targets);
 	void update_weights();
 
+	void run_training_epoch(TrainingDataSet *tset);
+
 private:
 
 	Net *net;
@@ -87,7 +89,7 @@ private:
 	inline int sign();
 
 	float get_hidden_error_gradient(int j);
-	void run_training_epoch(TrainingDataSet *tset);
+	//void run_training_epoch(TrainingDataSet *tset);
 
 	float update_weight_rpropp(float** gradients, float** last_gradients,
 			float** deltas, float** last_wt_changes, int i, int j);

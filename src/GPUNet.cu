@@ -166,12 +166,13 @@ __device__ float d_mse = 0; //current mse
 
 __global__ void output_correct_v2(float *output, float *d_set, int t, int n_output) {
 	float *target = &(d_set[t]);
+	int n = 0;
 	for (int i = 0; i < n_output; ++i) {
-		if (clamp(output[i]) != clamp(target[i])) {
-			return;
+		if (clamp(output[i]) == clamp(target[i])) {
+			++n;
 		}
 	}
-	++d_num_correct;
+	d_num_correct += n;
 }
 
 __global__ void calc_acc(int n_patterns) {
@@ -292,7 +293,8 @@ __global__ void feed_forward_layer_v2(int n_layer1, int n_layer2, float* layer1,
 	if (n < n_layer2 && tid <= n_layer1)
 		//terms[tid] = layer1[tid] * get_weight(weights, n_layer1, tid, n);
 		//terms[tid] = layer1[tid] * weights[(n_layer1+1)*n + tid];
-		terms[tid] = layer1[tid] * get_weight(weights, n_layer2, tid, n);
+		//terms[tid] = layer1[tid] * get_weight(weights, n_layer2, tid, n);
+		terms[tid] = layer1[tid] * weights[(n_layer2)*tid + n];
 
 	__syncthreads();
 //	if (terms[tid] != 0)
@@ -329,8 +331,10 @@ __global__ void feed_forward_layer_v2_flat(int n_layer1, int n_layer2, float* d_
 	if (n < n_layer2 && tid <= n_layer1) {
 		float *layer1 = &(d_set[ind]);
 		//terms[tid] = layer1[tid] * get_weight(weights, n_layer1, tid, n);
-		terms[tid] = layer1[tid] * get_weight(weights, n_layer2, tid, n);
 		//terms[tid] = layer1[tid] * weights[(n_layer1+1)*n + tid];
+		//terms[tid] = layer1[tid] * get_weight(weights, n_layer2, tid, n);
+		terms[tid] = layer1[tid] * weights[(n_layer2)*tid + n];
+
 	}
 
 	__syncthreads();
@@ -607,11 +611,11 @@ __global__ void update_weights_rprop(int n1, int n2, float *d_weights, float* gr
  */
 
 __global__ void print_gpu_net(int n_input, int n_hidden, int n_output,
-		float *input, float *hidden, float *output, float *ih_weights, float *ho_weights) {
-	for (int i = 0; i <= n_input; ++i) {
-		printf("input %d: %f, ", i, input[i]);
-	}
-	printf("\n");
+		float *hidden, float *output, float *ih_weights, float *ho_weights) {
+	//for (int i = 0; i <= n_input; ++i) {
+	//	printf("input %d: %f, ", i, input[i]);
+	//}
+	//printf("\n");
 	for (int i = 0; i <= n_input; ++i) {
 		for (int j = 0; j < n_hidden; ++j) {
 			printf("ih weight (%d,%d,%d): %f, ", i, j, (n_input+1)*j + i, get_weight(ih_weights, n_input, i, j));
@@ -888,7 +892,7 @@ void GPUNet::init_net() {
 	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 
 	//init nodes to all 0
-	init_nodes_layer_v2<<<(n_input+1+threads-1)/threads, threads>>>(n_input+1, d_input);
+	//init_nodes_layer_v2<<<(n_input+1+threads-1)/threads, threads>>>(n_input+1, d_input);
 	init_nodes_layer_v2<<<(n_hidden+1+threads-1)/threads, threads>>>(n_hidden+1, d_hidden);
 	init_nodes_output_v2<<<(n_output+threads-1)/threads, threads>>>(n_output, d_output);
 
@@ -949,8 +953,9 @@ void GPUNet::set_base_file_name(std::string f) {
  * to keep it simple, run in 1 thread
  */
 void GPUNet::print_net() {
+	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 	print_gpu_net<<<1, 1>>>(n_input, n_hidden, n_output,
-			d_input, d_hidden, d_output, d_ih_weights, d_ho_weights);
+			d_hidden, d_output, d_ih_weights, d_ho_weights);
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }
 
@@ -1069,6 +1074,10 @@ void GPUNet::calc_dataset_parameters(TrainingDataSet *tset) {
 		--n_copyable_patterns;
 	}
 
+	if (n_copyable_patterns < 0) {
+		std::cerr << "";
+	}
+
 	if (n_copyable_patterns > tset->n_patterns) {
 		n_copyable_patterns = tset->n_patterns;
 	}
@@ -1159,6 +1168,9 @@ void GPUNet::train_net_sectioned(TrainingDataSet *tset) {
 			std::cout << "Epoch: " << epoch << ", ";
 			run_training_epoch_dev(d_training_set, tset->n_training, tset->fpp);
 			++epoch;
+
+			//copy_error_to_host(&trainingSetMSE, &trainingSetAccuracy);
+			//std::cout << "current mse = " << trainingSetMSE << ", current acc = " << trainingSetAccuracy << std::endl;
 
 			if (epoch % save_freq == 0) {
 				std::string fname = base_file_path + "_" + boost::lexical_cast<std::string>(epoch) + ".net";
@@ -1350,6 +1362,54 @@ void GPUNet::feed_forward_v1_2(float* d_set, int i) {
 /*
  * TODO: what if the first layer cannot be done using the reduction but the second layer can
  */
+/*void GPUNet::feed_forward_v2(float* d_set, int i) {
+	switch (gpu_opt_ff_ih_bsize) {
+	case 1:
+		feed_forward_layer_v2_flat<1><<<n_hidden, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<1><<<n_output, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 2:
+		feed_forward_layer_v2_flat<2><<<n_hidden, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<2><<<n_output, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 4:
+		feed_forward_layer_v2_flat<4><<<n_hidden, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<4><<<n_output, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 8:
+		feed_forward_layer_v2_flat<8><<<n_hidden, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<8><<<n_output, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 16:
+		feed_forward_layer_v2_flat<16><<<n_hidden, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<16><<<n_output, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 32:
+		feed_forward_layer_v2_flat<32><<<n_hidden, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<32><<<n_output, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 64:
+		feed_forward_layer_v2_flat<64><<<n_hidden, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<64><<<n_output, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 128:
+		feed_forward_layer_v2_flat<128><<<n_hidden, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<128><<<n_output, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 256:
+		feed_forward_layer_v2_flat<256><<<n_hidden, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<256><<<n_output, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 512:
+		feed_forward_layer_v2_flat<512><<<n_hidden, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<512><<<n_output, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	case 1024:
+		feed_forward_layer_v2_flat<1024><<<n_hidden, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_input, n_hidden, d_set, i, d_hidden, d_ih_weights);
+		feed_forward_layer_v2<1024><<<n_output, gpu_opt_ff_ih_bsize, gpu_opt_ff_ih_bsize*sizeof(float)>>>(n_hidden, n_output, d_hidden, d_output, d_ho_weights);
+		break;
+	}
+}*/
 void GPUNet::feed_forward_v2(float* d_set, int i) {
 	int threads = GPUNetSettings::GPU_DEFAULT_BLOCK_SIZE;
 	if (gpu_opt_ff_ih_bsize <= 32) {
@@ -1405,12 +1465,12 @@ bool GPUNet::validate_weights(float *desired_ih_weights, float *desired_ho_weigh
 	CUDA_CHECK_RETURN(cudaMemcpy(h_ho_weights, d_ho_weights, (n_hidden+1)*n_output*sizeof(float), cudaMemcpyDeviceToHost));
 
 	for (int i = 0; i < (n_input+1)*n_hidden; ++i) {
-		if (abs(desired_ih_weights[i] - h_ih_weights[i]) > .005)
+		if (abs(desired_ih_weights[i] - h_ih_weights[i]) > .001)
 			return false;
 	}
 
 	for (int i = 0; i < (n_hidden+1)*n_output; ++i) {
-		if (abs(desired_ho_weights[i] - h_ho_weights[i]) > .005)
+		if (abs(desired_ho_weights[i] - h_ho_weights[i]) > .001)
 			return false;
 	}
 
@@ -1508,8 +1568,9 @@ void GPUNet::test_backprop(Net &net, NetData &d) {
 	//std::cout << "GPU net 2" << std::endl;
 	backprop_v3(d_training_set, i, t);
 	CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-	//print_net();
-	//std::cout << std::endl;
+	net.print_network();
+	print_net();
+	std::cout << std::endl;
 	std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl << std::endl;
 
 //	net.feed_forward(&(tset->training_set[tset->fpp]));
@@ -1528,6 +1589,11 @@ void GPUNet::run_parallel(Net &net, NetData &d) {
 	GPUNet::copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
 
 	NetTrainer nt(&net);
+	std::cout << "CPU network" << std::endl;
+	net.print_network();
+	std::cout << "GPU network" << std::endl;
+	print_net();
+	std::cout << std::endl;
 
 	int e = 0;
 	std::string r = "";
@@ -1536,11 +1602,13 @@ void GPUNet::run_parallel(Net &net, NetData &d) {
 		for (int i = 0; i < d.get_training_dataset()->n_training; ++i) {
 			int inp = i*tset->fpp;
 			int tar = inp+n_input+1;
-			net.feed_forward(&(d_training_set[inp]));
-			nt.backprop(&(d_training_set[tar]));
+			//net.feed_forward(&(d.get_training_dataset()->training_set[inp]));
+			//nt.backprop(&(d.get_training_dataset()->training_set[tar]));
 
-			feed_forward_v1_2(d_training_set, inp);
-			backprop_v2(d_training_set, inp, tar);
+			nt.run_training_epoch(d.get_training_dataset());
+			run_training_epoch_dev(d_training_set, tset->n_training, tset->fpp);
+			//feed_forward_v1_2(d_training_set, inp);
+			//backprop_v2(d_training_set, inp, tar);
 
 			std::cout << "CPU network" << std::endl;
 			net.print_network();
@@ -1591,10 +1659,45 @@ size_t GPUNet::dataset_size(TrainingDataSet *tset) {
 size_t GPUNet::total_dev_mem(int dev) {
 	cudaDeviceProp props;
 	cudaGetDeviceProperties(&props, dev);
-	return props.totalGlobalMem; // - 1811000000 - 206688900; //minus 1.5 gb
+	return props.totalGlobalMem - 1213382500; // - 206688900; //minus 1.5 gb
 }
 
 void GPUNet::copy_to_device(float* set, int n_patterns, int fpp, float **d_set) {
 	CUDA_CHECK_RETURN(cudaMalloc((void**)d_set, n_patterns*fpp*sizeof(float)));
 	CUDA_CHECK_RETURN(cudaMemcpy(*d_set, set, n_patterns*fpp*sizeof(float), cudaMemcpyHostToDevice));
+}
+
+/*
+* Copies the host vector to a pointer array on the host that holds pointers to FeatureVector on the device with bias node
+*/
+void GPUNet::copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv) {
+	std::cout << "Copying data" << std::endl;
+	start = clock();
+
+	*dv = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
+	//FeatureVector** host_dv_tmp = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
+
+	for (size_t i = 0; i < hv.size(); ++i) {
+		//allocate device memory
+		FeatureVector *d_fv = (FeatureVector*)malloc(sizeof(FeatureVector*));
+
+		float *d_inp, *d_tar;
+		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_inp, (n_input+1)*sizeof(float)));
+		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_tar, (n_output)*sizeof(float)));
+
+		//TODO: cuda-memcheck claims there is an unspecified launch failure at this line...
+		CUDA_CHECK_RETURN(cudaMemcpy(d_inp, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
+		CUDA_CHECK_RETURN(cudaMemcpy(d_tar, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
+
+		d_fv->input = d_inp;
+		d_fv->target = d_tar;
+
+		//TODO: does setting all in parallel improve speed?
+		set_bias<<<1, 1>>>(n_input, d_inp);
+		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
+
+		(*dv)[i] = d_fv;
+	}
+	finish = clock();
+	std::cout << "Copy time: " << ((float)finish-start)/CLOCKS_PER_SEC << std::endl;
 }
