@@ -33,7 +33,8 @@ if __name__ == "__main__":
     n_patterns = int(sys.argv[1])
     n_input = int(sys.argv[2])
     n_output = int(sys.argv[3])
-    
+
+    print "Generating random dataset with", n_patterns, "patterns", n_input,"inputs",n_output,"outputs"
     rand_set = generate_set(n_patterns, n_input, n_output)
     
     write_set(rand_set, n_patterns, n_input, n_output)

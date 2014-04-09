@@ -188,7 +188,7 @@ int main(int argc, char **argv) {
 				gnet.set_training_params(l_rate, momentum, batching);
 				gnet.set_stopping_conds(max_epochs, 95.0);
 				start = clock();
-				gnet.train_net_sectioned_overlap(d.get_training_dataset());
+				gnet.train_net_sectioned(d.get_training_dataset());
 				stop = clock();
 				std::cout << "GPU time: " << ((float)stop - start) / CLOCKS_PER_SEC << std::endl;
 			}
