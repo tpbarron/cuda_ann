@@ -53,8 +53,8 @@ bool NetIO::read_net(std::string fname) {
 		gnet->generalizationSetMSE = get_next_float(in);
 		gnet->validationSetMSE = get_next_float(in);
 
-		gnet->h_ih_weights = get_next_list(in);
-		gnet->h_ho_weights = get_next_list(in);
+		get_next_list(in, gnet->h_ih_weights);
+		get_next_list(in, gnet->h_ho_weights);
 
 		// get weights
 		CUDA_CHECK_RETURN(cudaMemcpy(gnet->d_ih_weights, gnet->h_ih_weights, (gnet->n_input+1)*gnet->n_hidden*sizeof(float), cudaMemcpyHostToDevice));
@@ -169,7 +169,7 @@ float NetIO::get_next_float(std::ifstream &in) {
 	return boost::lexical_cast<float>(res[1]);
 }
 
-float* NetIO::get_next_list(std::ifstream &in) {
+void NetIO::get_next_list(std::ifstream &in, float *h_l) {
 	std::string line;
 	std::getline(in, line);
 	std::vector<std::string> res;
@@ -177,10 +177,11 @@ float* NetIO::get_next_list(std::ifstream &in) {
 	std::vector<std::string> list;
 	boost::split(list, res[1], boost::is_any_of(", "));
 
-	float *fl_list = new float[list.size()];
+	//float *fl_list = new float[list.size()];
 	//just overwrite random GPU values
 	for (size_t i = 0; i < list.size(); ++i) {
-		fl_list[i] = boost::lexical_cast<float>(list[i]);
+		//fl_list[i] = boost::lexical_cast<float>(list[i]);
+		h_l[i] = boost::lexical_cast<float>(list[i]);
 	}
-	return fl_list;
+	//return fl_list;
 }

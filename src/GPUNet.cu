@@ -172,7 +172,7 @@ __global__ void output_correct_v2(float *output, float *d_set, int t, int n_outp
 			++n;
 		}
 	}
-	d_num_correct += n;
+	d_num_correct += (n == n_output);
 }
 
 __global__ void calc_acc(int n_patterns) {

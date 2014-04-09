@@ -31,7 +31,7 @@ private:
 	int get_next_int(std::ifstream &in);
 	long get_next_long(std::ifstream &in);
 	float get_next_float(std::ifstream &in);
-	float* get_next_list(std::ifstream &in);
+	void get_next_list(std::ifstream &in, float *h_l);
 };
 
 #endif /* NETIO_H_ */
