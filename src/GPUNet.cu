@@ -1594,37 +1594,47 @@ void GPUNet::run_parallel(Net &net, NetData &d) {
 	GPUNet::copy_to_device(tset->training_set, tset->n_training, tset->fpp, &d_training_set);
 
 	NetTrainer nt(&net);
-	std::cout << "CPU network" << std::endl;
-	net.print_network();
-	std::cout << "GPU network" << std::endl;
-	print_net();
-	std::cout << std::endl;
+//	std::cout << "CPU network" << std::endl;
+//	net.print_network();
+//	std::cout << "GPU network" << std::endl;
+//	print_net();
+//	std::cout << std::endl;
 
 	int e = 0;
 	std::string r = "";
 	while (true) {
 		std::cout << "Epoch " << e++ << std::endl;
-		for (int i = 0; i < d.get_training_dataset()->n_training; ++i) {
-			int inp = i*tset->fpp;
-			int tar = inp+n_input+1;
-			//net.feed_forward(&(d.get_training_dataset()->training_set[inp]));
-			//nt.backprop(&(d.get_training_dataset()->training_set[tar]));
+		//for (int i = 0; i < d.get_training_dataset()->n_training; ++i) {
+		//int inp = i*tset->fpp;
+		//int tar = inp+n_input+1;
+		//net.feed_forward(&(d.get_training_dataset()->training_set[inp]));
+		//nt.backprop(&(d.get_training_dataset()->training_set[tar]));
 
-			nt.run_training_epoch(d.get_training_dataset());
-			run_training_epoch_dev(d_training_set, tset->n_training, tset->fpp);
-			//feed_forward_v1_2(d_training_set, inp);
-			//backprop_v2(d_training_set, inp, tar);
+		nt.run_training_epoch(d.get_training_dataset());
+		run_training_epoch_dev(d_training_set, tset->n_training, tset->fpp);
+		//feed_forward_v1_2(d_training_set, inp);
+		//backprop_v2(d_training_set, inp, tar);
 
-			std::cout << "CPU network" << std::endl;
-			net.print_network();
-			std::cout << "GPU network" << std::endl;
-			print_net();
-			std::cout << "Validates: " << validate_weights(net.wInputHidden, net.wHiddenOutput) << std::endl;
-			std::getline(std::cin, r);
-			if (r == "exit") {
-				return;
-			}
+		//std::cout << "CPU network" << std::endl;
+		//net.print_network();
+		//std::cout << "GPU network" << std::endl;
+		//print_net();
+		bool v = validate_weights(net.wInputHidden, net.wHiddenOutput);
+		std::cout << "Validates: " << v << std::endl;
+		if (!v) {
+//			std::cout << "CPU network" << std::endl;
+//			net.print_network();
+//			std::cout << "GPU network" << std::endl;
+//			print_net();
 		}
+		copy_error_to_host(&trainingSetMSE, &trainingSetAccuracy);
+		std::cout << "GPU error: " << trainingSetMSE << ", " << trainingSetAccuracy << std::endl;
+		std::cout << "CPU error: " << nt.trainingSetMSE << ", " << nt.trainingSetAccuracy<< std::endl;
+		std::getline(std::cin, r);
+		if (r == "exit") {
+			return;
+		}
+		//}
 	}
 }
 
@@ -1670,39 +1680,4 @@ size_t GPUNet::total_dev_mem(int dev) {
 void GPUNet::copy_to_device(float* set, int n_patterns, int fpp, float **d_set) {
 	CUDA_CHECK_RETURN(cudaMalloc((void**)d_set, n_patterns*fpp*sizeof(float)));
 	CUDA_CHECK_RETURN(cudaMemcpy(*d_set, set, n_patterns*fpp*sizeof(float), cudaMemcpyHostToDevice));
-}
-
-/*
-* Copies the host vector to a pointer array on the host that holds pointers to FeatureVector on the device with bias node
-*/
-void GPUNet::copy_to_device_host_array_ptrs_biased(thrust::host_vector<FeatureVector*> &hv, FeatureVector ***dv) {
-	std::cout << "Copying data" << std::endl;
-	start = clock();
-
-	*dv = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
-	//FeatureVector** host_dv_tmp = (FeatureVector**)malloc(hv.size()*sizeof(FeatureVector*));
-
-	for (size_t i = 0; i < hv.size(); ++i) {
-		//allocate device memory
-		FeatureVector *d_fv = (FeatureVector*)malloc(sizeof(FeatureVector*));
-
-		float *d_inp, *d_tar;
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_inp, (n_input+1)*sizeof(float)));
-		CUDA_CHECK_RETURN(cudaMalloc((void **)&d_tar, (n_output)*sizeof(float)));
-
-		//TODO: cuda-memcheck claims there is an unspecified launch failure at this line...
-		CUDA_CHECK_RETURN(cudaMemcpy(d_inp, hv[i]->input, n_input*sizeof(float), cudaMemcpyHostToDevice));
-		CUDA_CHECK_RETURN(cudaMemcpy(d_tar, hv[i]->target, n_output*sizeof(float), cudaMemcpyHostToDevice));
-
-		d_fv->input = d_inp;
-		d_fv->target = d_tar;
-
-		//TODO: does setting all in parallel improve speed?
-		set_bias<<<1, 1>>>(n_input, d_inp);
-		CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-
-		(*dv)[i] = d_fv;
-	}
-	finish = clock();
-	std::cout << "Copy time: " << ((float)finish-start)/CLOCKS_PER_SEC << std::endl;
 }

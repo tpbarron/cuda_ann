@@ -42,6 +42,13 @@ public:
 
 	void run_training_epoch(TrainingDataSet *tset);
 
+	float trainingSetAccuracy;
+	float validationSetAccuracy;
+	float generalizationSetAccuracy;
+	float trainingSetMSE;
+	float validationSetMSE;
+	float generalizationSetMSE;
+
 private:
 
 	Net *net;
@@ -58,13 +65,6 @@ private:
 	float momentum;
 
 	float desired_acc;
-
-	float trainingSetAccuracy;
-	float validationSetAccuracy;
-	float generalizationSetAccuracy;
-	float trainingSetMSE;
-	float validationSetMSE;
-	float generalizationSetMSE;
 
 	float** deltaInputHidden;
 	float** deltaHiddenOutput;

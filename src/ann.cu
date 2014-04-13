@@ -85,7 +85,6 @@ int main(int argc, char **argv) {
 	boost_po::positional_options_description p;
 	p.add("dataset", -1);
 
-
 	boost_po::variables_map vm;
 	boost_po::store(boost_po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
 	boost_po::notify(vm);
