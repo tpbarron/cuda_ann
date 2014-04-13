@@ -33,3 +33,15 @@
   * This improved the time for one epoch on the face dataset (6977 2960 1) from 284 seconds to epoch to less than 57.
   * Try using shared mem to access that require indexing in opposite manner
 
+
+-----
+
+* References for feature selection:
+  * (http://www.cs.cmu.edu/~kdeng/thesis/feature.pdf), (http://cdn.intechopen.com/pdfs-wm/14882.pdf)
+
+* Rprop (http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.17.1332&rep=rep1&type=pdf)
+* Learning rate adaptation (http://www.willamette.edu/~gorr/classes/cs449/momrate.html)
+
+* Stanford Deep Learning wiki
+  * (http://deeplearning.stanford.edu/wiki/index.php/Whitening)
+  * (http://openclassroom.stanford.edu/MainFolder/CoursePage.php?course=MachineLearning)
